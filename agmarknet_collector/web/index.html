@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mandi price forecast</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 id="title"></h1>
+      <div class="range states" id="states" role="group"></div>
+    </div>
+    <div class="head-right">
+      <button class="btn ghost small-btn" id="lang" type="button" aria-label="Language"></button>
+      <span id="freshness" class="muted small" aria-live="polite"></span>
+    </div>
+  </header>
+
+  <section class="card" aria-labelledby="pick-title">
+    <h2 id="pick-title" class="sr-only"></h2>
+    <div class="pickers">
+      <div><label for="group" id="l-group"></label><select id="group"></select></div>
+      <div><label for="commodity" id="l-commodity"></label><select id="commodity"></select></div>
+      <div id="variety-box" hidden><label for="variety" id="l-variety"></label><select id="variety"></select></div>
+      <div id="grade-box" hidden><label for="grade" id="l-grade"></label><select id="grade"></select></div>
+      <div><label for="district" id="l-district"></label><select id="district"></select></div>
+      <div><label for="market" id="l-market"></label><select id="market"></select></div>
+    </div>
+  </section>
+
+  <p class="muted small" id="building" hidden></p>
+  <label class="onlyfc"><input type="checkbox" id="only"> <span id="l-only"></span></label>
+  <div id="banner" role="status"></div>
+  <div id="result"></div>
+
+  <p class="muted small" id="disclaimer"></p>
+</div>
+<script src="/static/i18n.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

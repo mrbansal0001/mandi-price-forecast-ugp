@@ -1,0 +1,220 @@
+{
+  "status": true,
+  "message": "Data fetched successfully",
+  "data": {
+    "columns": [
+      {
+        "key": "commodity_info",
+        "columns": [
+          {
+            "key": "state_name",
+            "title": "State/UT"
+          },
+          {
+            "key": "district_name",
+            "title": "District"
+          },
+          {
+            "key": "market_name",
+            "title": "Market"
+          },
+          {
+            "key": "cmdt_grp_name",
+            "title": "Commodity Group"
+          },
+          {
+            "key": "cmdt_name",
+            "title": "Commodity"
+          }
+        ]
+      },
+      {
+        "key": "price_info",
+        "columns": [
+          {
+            "key": "variety_name",
+            "title": "Variety"
+          },
+          {
+            "key": "grade_name",
+            "title": "Grade"
+          },
+          {
+            "key": "min_price",
+            "title": "Min Price"
+          },
+          {
+            "key": "max_price",
+            "title": "Max Price"
+          },
+          {
+            "key": "model_price",
+            "title": "Modal Price"
+          },
+          {
+            "key": "unit_name_price",
+            "title": "Price Unit"
+          },
+          {
+            "key": "arrival_date",
+            "title": "Price Date"
+          }
+        ]
+      }
+    ],
+    "records": [
+      {
+        "data": [
+          {
+            "cmdt_name": "Onion",
+            "max_price": "5,111.00",
+            "min_price": "900.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Akole ",
+            "model_price": "4,311.00",
+            "arrival_date": "01-09-2026",
+            "variety_name": "Unhali",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          },
+          {
+            "cmdt_name": "Onion",
+            "max_price": "4,500.00",
+            "min_price": "1,000.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Jamkhed ",
+            "model_price": "2,750.00",
+            "arrival_date": "01-09-2026",
+            "variety_name": "Local",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          },
+          {
+            "cmdt_name": "Onion",
+            "max_price": "3,200.00",
+            "min_price": "700.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Karjat ",
+            "model_price": "2,000.00",
+            "arrival_date": "01-09-2026",
+            "variety_name": "Local",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          },
+          {
+            "cmdt_name": "Onion",
+            "max_price": "4,700.00",
+            "min_price": "1,000.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Kopargaon ",
+            "model_price": "4,200.00",
+            "arrival_date": "02-09-2026",
+            "variety_name": "Unhali",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          },
+          {
+            "cmdt_name": "Onion",
+            "max_price": "4,470.00",
+            "min_price": "1,000.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Kopargaon ",
+            "model_price": "4,000.00",
+            "arrival_date": "01-09-2026",
+            "variety_name": "Unhali",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          },
+          {
+            "cmdt_name": "Onion",
+            "max_price": "4,700.00",
+            "min_price": "1,000.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Newasa ",
+            "model_price": "4,000.00",
+            "arrival_date": "01-09-2026",
+            "variety_name": "Unhali",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          },
+          {
+            "cmdt_name": "Onion",
+            "max_price": "5,500.00",
+            "min_price": "1,000.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Parner ",
+            "model_price": "3,800.00",
+            "arrival_date": "02-09-2026",
+            "variety_name": "Unhali",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          },
+          {
+            "cmdt_name": "Onion",
+            "max_price": "5,200.00",
+            "min_price": "1,000.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Pathardi ",
+            "model_price": "3,100.00",
+            "arrival_date": "02-09-2026",
+            "variety_name": "Red",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          },
+          {
+            "cmdt_name": "Onion",
+            "max_price": "5,500.00",
+            "min_price": "700.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Rahata ",
+            "model_price": "3,500.00",
+            "arrival_date": "01-09-2026",
+            "variety_name": "Other",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          },
+          {
+            "cmdt_name": "Onion",
+            "max_price": "5,700.00",
+            "min_price": "500.00",
+            "grade_name": "Local",
+            "state_name": "Maharashtra",
+            "market_name": "APMC Rahuri ",
+            "model_price": "3,100.00",
+            "arrival_date": "01-09-2026",
+            "variety_name": "Other",
+            "cmdt_grp_name": "Vegetables",
+            "district_name": "Ahilyanagar",
+            "unit_name_price": "Rs./Quintal"
+          }
+        ],
+        "pagination": [
+          {
+            "total_count": 137,
+            "total_pages": 14,
+            "current_page": 1,
+            "items_per_page": 10
+          }
+        ]
+      }
+    ]
+  }
+}

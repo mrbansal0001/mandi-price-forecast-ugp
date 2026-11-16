@@ -1,0 +1,1041 @@
+\documentclass[12pt,a4paper,oneside]{report}
+
+% ===================================================================
+% FIGURES TO UPLOAD (same folder as this file). Missing files compile
+% as a grey placeholder box, so the report always builds.
+%   logo.png                       institute logo (title page)
+%   01_system_architecture.png     overall architecture diagram        (Fig. 1.1 / 7.1)
+%   02_scraping_workflow.png       request/CAPTCHA/ticket flow          (Fig. 3.1)
+%   03_request_budget.png          requests needed by each plan         (Fig. 3.2)
+%   04_arrival_lag.png             rows per data date, UP vs Rajasthan  (Fig. 4.1)
+%   05_example_series.png          one price series with gaps           (Fig. 4.2)
+%   06_backtest_scheme.png         rolling-origin back-test diagram     (Fig. 5.1)
+%   07_model_mae.png               MAE of each model, UP and Rajasthan  (Fig. 6.1)
+%   08_forecast_status.png         forecast / delayed / insufficient    (Fig. 6.2)
+%   09_farmer_page_up.png          screenshot, Uttar Pradesh            (Fig. 7.2)
+%   10_farmer_page_rajasthan.png   screenshot, Rajasthan (Hindi)        (Fig. 7.3)
+%   11_admin_page.png              screenshot of the admin page         (Fig. 7.4)
+% ===================================================================
+
+% -------------------------------------------------------------------
+% Editable title-page details
+% -------------------------------------------------------------------
+\newcommand{\studentname}{Tanish Bansal}
+\newcommand{\rollnumber}{231075}
+\newcommand{\supervisor}{Satya Prakash Singh}
+\newcommand{\projectcourse}{Undergraduate Project Report (MTH496)}
+\newcommand{\department}{Department of Mathematics and Statistics}
+\newcommand{\institution}{Indian Institute of Technology, Kanpur}
+\newcommand{\projecttitle}{Automated Web Scraping and Model-Selection Forecasting\\ of Agricultural Mandi Prices\\ for Uttar Pradesh and Rajasthan}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{setspace}
+\usepackage{titlesec}
+\graphicspath{{./}{figures/}}
+
+\hypersetup{hidelinks,bookmarksnumbered=true,pdfauthor={\studentname},pdftitle={Automated Web Scraping and Model-Selection Forecasting of Agricultural Mandi Prices}}
+\setstretch{1.10}\setlength{\headheight}{14pt}
+\setlength{\parskip}{0.35em}
+\setlength{\parindent}{1.5em}
+\setlist[itemize]{leftmargin=2em,itemsep=0.2em,topsep=0.25em}
+\setlist[enumerate]{leftmargin=2em,itemsep=0.25em,topsep=0.25em}
+\captionsetup{font=small,labelfont=bf}
+\numberwithin{equation}{chapter}
+\numberwithin{figure}{chapter}
+\numberwithin{table}{chapter}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Mandi Price Collection and Forecasting}
+\fancyhead[R]{\small Undergraduate Project Report}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{example}{Example}[chapter]
+\newtheorem{remark}{Remark}[chapter]
+
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\E}{E}
+\DeclareMathOperator{\argmin}{arg\,min}
+\DeclareMathOperator{\med}{median}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\hatt}[1]{\widehat{#1}}
+\newcommand{\Rs}{\text{Rs.}}
+\newcommand{\trans}{^{\mathsf T}}
+
+% Figure that falls back to a placeholder box when the image is not uploaded yet.
+\newcommand{\safefig}[2]{\IfFileExists{#1}{\includegraphics[width=#2\textwidth]{#1}}{%
+  \fbox{\parbox[c][4.5cm][c]{0.8\textwidth}{\centering\small Figure file not found:\\\texttt{\detokenize{#1}}}}}}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{black!30},
+  showstringspaces=false,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color{black!65}
+}
+
+\begin{document}
+
+% =============================== TITLE ===============================
+\begin{titlepage}
+\thispagestyle{empty}
+
+\centering
+\IfFileExists{logo.png}{%
+  \includegraphics[width=3.2cm]{logo.png}\par
+}{%
+  \framebox{\parbox[c][2.8cm][c]{2.8cm}{\centering\small\textbf{IIT Kanpur}\\\textbf{Logo}\\(\texttt{logo.png})}}\par
+}
+\vspace*{1.0cm}
+{\LARGE\bfseries \projecttitle\par}
+\vspace{1.8cm}
+{\Large \studentname\par}
+\vspace{0.25cm}
+{\large Roll Number: \rollnumber\par}
+\vspace{1.0cm}
+{\large Project Supervisor: \supervisor\par}
+\vspace{1.9cm}
+{\large\bfseries \projectcourse\par}
+\vspace{0.7cm}
+{\large \department\par}
+{\large \institution\par}
+
+\vfill
+{\large \today\par}
+\vspace*{0.8cm}
+\end{titlepage}
+
+% ============================ FRONT MATTER ============================
+\pagenumbering{roman}
+\setcounter{page}{1}
+\tableofcontents
+\clearpage
+\listoffigures
+\clearpage
+\listoftables
+\clearpage
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+Indian wholesale (mandi) prices are published by the Government of India on the Agmarknet portal, but only as filtered reports that must be requested one at a time and unlocked with a CAPTCHA. The portal offers no history download for many markets at once and no forecast. This project builds a complete, working pipeline that (i) collects the reported prices automatically, politely and resumably, (ii) stores and validates them, (iii) forecasts the next-day modal price of every eligible crop-market series together with a calibrated 95\% range, and (iv) serves the result to farmers through a bilingual (English and Hindi) website.
+
+The first half of the work is data acquisition. The report documents how the portal's report interface behaves (one CAPTCHA per report, tickets bound to the exact filters, 5,000-row pages, one-year date spans, throttling after a burst of about 100 requests) and shows how these facts shape a collector that issues one request per commodity per state instead of one per market per month. A naive plan over all 36 states, 605 commodities and 13 months would need 283,140 report windows; the implemented design needs about 400 for Uttar Pradesh and about 150 for Rajasthan. The collector survives throttling, network outages and restarts by deferring work, adapting its request pace and resuming completed windows. It has collected about 685{,}000 validated price rows covering 28 October 2025 to 27 October 2026 for Uttar Pradesh (251 markets, 97 commodities) and Rajasthan (160 markets, 90 commodities).
+
+The second half is forecasting. Six simple forecasters (last price, median of the last five prices, seven-day mean, two exponential smoothers and an adaptive local-linear-trend Kalman filter) are back-tested on every series in rolling-origin fashion; the model with the lowest earlier error is chosen per series and scored on 30 held-out days. The 95\% range is the empirical error quantile of the chosen model, inflated and floored, and reaches 97.0\% coverage in Uttar Pradesh and 94.9\% in Rajasthan on held-out tests. The results are reported honestly: the Kalman filter is the weakest model, a median of recent prices is very hard to beat, and per-series selection is within about 1\% of the best fixed model rather than clearly better. Only 655 Uttar Pradesh and 429 Rajasthan series currently qualify for a forecast, mainly because states upload prices with a lag of days.
+
+\clearpage
+\chapter*{Declaration}
+\addcontentsline{toc}{chapter}{Declaration}
+I hereby declare that this report presents the work undertaken for the undergraduate project entitled \emph{Automated Web Scraping and Model-Selection Forecasting of Agricultural Mandi Prices for Uttar Pradesh and Rajasthan}. Ideas, methods and statements taken from published sources are acknowledged through citations and the bibliography. All numerical results reported here were computed from the price data collected by the system described in this report from the public Agmarknet portal.
+
+\vspace{1.2cm}
+\noindent Name: \studentname \hfill Roll Number: \rollnumber
+
+\vspace{1.0cm}
+\noindent Signature: \rule{7cm}{0.4pt}
+
+\vspace{0.8cm}
+\noindent Date: \rule{4cm}{0.4pt}
+
+\clearpage
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+I thank my project supervisor, \supervisor, and the \department, \institution, for guidance and for the opportunity to work on a problem with a direct benefit to farmers. I am also grateful to my classmates for discussions on forecasting methodology.
+
+\clearpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% ============================== CHAPTER 1 ==============================
+\chapter{Introduction}
+
+\section{Motivation}
+A farmer deciding where and when to sell a crop depends on the price at nearby mandis. These prices change from day to day, differ between markets a few kilometres apart, and are reported by market officials to a central portal, Agmarknet \cite{agmarknet}. The portal is a rich public record, but using it directly is slow: a user must choose a state, commodity, variety, market and dates, read a CAPTCHA, and then obtain one report. There is no way to see, say, tomorrow's likely price for wheat at the user's own mandi.
+
+This project closes that gap in two steps. First it builds an \emph{automatic data pipeline} so that the latest prices are available without anyone typing a CAPTCHA. Second it builds a \emph{forecasting layer} that predicts the next day's modal price for each crop in each market and states how uncertain the prediction is. Both layers are exposed through a simple website with the same filters as the official portal.
+
+\section{Problem statement}
+Given the daily reports of an Agmarknet market for a particular commodity, variety and grade, forecast the modal price (in rupees per quintal) for the next calendar day, with a 95\% range, for as many markets and crops as the data supports, and keep the forecasts up to date automatically.
+
+\section{Objectives}
+\begin{enumerate}
+  \item understand the portal's report interface well enough to collect its data automatically and within its rate limits;
+  \item design a collector that is resumable, validates what it stores and does not lose or duplicate data;
+  \item define a price series for every market--crop--variety--grade combination and handle days with no report without inventing data;
+  \item compare several simple forecasting models on real series using strictly time-ordered tests, and select a model per series;
+  \item produce a prediction range whose real coverage is measured and reported;
+  \item present the result in a bilingual website with the portal's filters, and operate it on a schedule;
+  \item state clearly what the system does not do and what is still unverified.
+\end{enumerate}
+
+\section{Contributions}
+\begin{itemize}
+  \item A measured description of the portal's behaviour (Chapter~3) and a collector design whose request count is orders of magnitude below a straightforward plan.
+  \item A fault-tolerant job system with throttling-aware pacing, deferral and resumption.
+  \item A per-series model-selection forecaster with an honest evaluation, including negative findings (Chapter~6).
+  \item An empirical study of how the portal's reporting lag limits forecasting coverage.
+  \item A deployed prototype website for two states (Chapter~7).
+\end{itemize}
+
+\section{Scope and what is not claimed}
+The forecasts are \emph{univariate}: each uses only the past prices of its own series, not weather, arrivals, policy or other markets. The horizon is one day after the forecast date; it becomes a multi-day-ahead forecast when the last report is old (Section~\ref{sec:setup}). Only Uttar Pradesh and Rajasthan are covered, and only one year of history (28 October 2025 onward) has been collected, so seasonal effects are not modelled. The system currently runs on a single computer; it is not yet hosted for public use. The scraping was done for research on public government data at a deliberately low request rate; Section~\ref{sec:responsible} discusses responsible use.
+
+\section{Organization of the report}
+Chapter~2 gives background and related work. Chapter~3 describes how the portal was studied and scraped. Chapter~4 covers storage, validation, series construction and an exploratory analysis of reporting lag. Chapter~5 defines the forecasting methods. Chapter~6 reports the experiments. Chapter~7 describes the website and operation. Chapter~8 lists limitations and future work, and Chapter~9 concludes. The appendices contain notation, the API, the database schema, further pseudocode and reproduction notes.
+
+\begin{figure}[H]
+\centering
+\safefig{01_system_architecture.png}{0.98}
+\caption{Overall architecture: the collector fetches reports from Agmarknet into a SQLite database; forecasting reads the database; a FastAPI service and scheduler serve the farmer and admin pages.}
+\label{fig:architecture}
+\end{figure}
+
+% ============================== CHAPTER 2 ==============================
+\chapter{Background and Related Work}
+
+\section{Mandis and the Agmarknet portal}
+A mandi is a regulated wholesale market. Market officials record, for each commodity, variety and grade traded on a day, the minimum, maximum and \emph{modal} price (the most common transaction price) and the arrival quantity. These records are uploaded by or on behalf of state marketing boards to the national portal Agmarknet \cite{agmarknet}. The portal's catalogue (as retrieved for this project) lists 36 states and union territories and 605 commodities. For prices alone, dates from 1 January 2021 are selectable, with a limit of one year per report; reports combining prices and arrivals exist only from 7 November 2025, the date of the portal's current version (``Agmarknet 2.0'').
+
+An important property is that upload is \emph{not instantaneous}. A survey in Odisha found that uploads were mostly completed within two to five days or after a week \cite{odisha}. Chapter~4 measures the same lag in the data collected here: Uttar Pradesh's newest reports are typically about six days behind, while Rajasthan's are about one day behind.
+
+\section{Web scraping}
+Web scraping is the automated extraction of data from websites. Modern portals often provide JSON endpoints behind the page, so a scraper can call those endpoints directly instead of parsing HTML \cite{glez2014}. Responsible scraping has three recurring concerns: correctness (what the endpoint really returns, including errors and empty results), politeness (request rate and retries) and robustness (partial failures, changes in the response format). The portal studied here adds a fourth: each report must be unlocked with a CAPTCHA, so the number of reports, not the number of rows, is the cost to be minimized.
+
+\section{Forecasting short, irregular price series}
+Classical time-series texts \cite{hamilton1994,hyndman2021} treat forecasting from regular, long series. Mandi series are different: they are short (at most a few hundred points), irregular (days without a report) and \emph{sticky} (a price may repeat for days and then jump). For such data, simple methods are often hard to beat. The M4 forecasting competition found that combinations and simple statistical methods were competitive with complex ones \cite{makridakis2020}. Exponential smoothing \cite{gardner1985} and the Kalman filter \cite{kalman1960,welch2006,durbin2012} are standard building blocks. This project uses them as members of a small model set rather than committing to one.
+
+\section{Evaluating forecasts}
+Forecast evaluation must respect time order. Out-of-sample tests that train on the past and score on later days avoid leaking future information \cite{tashman2000}. Standard error measures (MAE, RMSE, MAPE) and their limitations are discussed in \cite{hyndman2006}. Prediction intervals should be checked for \emph{coverage}, the fraction of actual values falling inside; proper scoring of intervals is discussed in \cite{gneiting2007}. The interval used here is built from the empirical distribution of a model's past errors, which is related in spirit to conformal prediction \cite{shafer2008}, although the guarantees of conformal methods are not claimed.
+
+% ============================== CHAPTER 3 ==============================
+\chapter{Web Scraping of the Agmarknet Portal}
+
+This chapter is the core engineering contribution. It explains what was learned about the portal, why the obvious plan fails, and how the collector works.
+
+\section{The report interface}
+The portal's ``Daily Price and Arrival Report'' page is a single-page application that calls a JSON API. A report is requested with a set of filters: price/arrival type, commodity group and commodity, variety, grade, state, district, market, and a date range. The collector uses two kinds of calls:
+\begin{enumerate}
+  \item a \emph{catalogue} call returning the options for every filter (states, districts, markets, commodities, groups, varieties, grades) and the allowed date range;
+  \item the \emph{report} call, which returns a page of rows together with pagination information (total count, total pages, current page).
+\end{enumerate}
+Each row of a report holds the arrival date, state, district, market, commodity, variety, grade, minimum, maximum and modal price, the price unit, and (for combined reports) the arrival quantity.
+
+\section{CAPTCHA and the access ticket}
+Before a report is served, the client must obtain a CAPTCHA image, answer it, and receive a short-lived \emph{ticket}. Three observations from experiments shaped the design:
+\begin{itemize}
+  \item the ticket is \emph{bound to the exact filters}: if the filters change, the portal answers ``Report filters changed. Please solve captcha again.'' Hence one CAPTCHA is needed for every distinct report;
+  \item once a ticket is issued for a report, it can be reused for all pages of \emph{that} report;
+  \item a wrong answer is reported as an invalid-CAPTCHA error, with an error code that is shared with throttling (Section~\ref{sec:throttle}).
+\end{itemize}
+The images contain six plain characters. They are solved locally by a glyph-template matcher: the font glyphs are rendered at several sizes, the image is segmented into six characters and each is matched against the templates (Pillow and NumPy). The solver rejects images it cannot segment instead of guessing, uses no remote solving service, and is limited to three fresh challenges per report attempt. Section~\ref{sec:perf} reports the diagnostic events observed. Figure~\ref{fig:scrapeflow} summarises the whole flow.
+
+\begin{figure}[H]
+\centering
+\safefig{02_scraping_workflow.png}{0.98}
+\caption{Flow of one report request: obtain a CAPTCHA, solve it locally, receive a ticket, then fetch the pages of the report with that ticket; errors are classified as CAPTCHA, throttling, outage or format change.}
+\label{fig:scrapeflow}
+\end{figure}
+
+\section{Measured behaviour of the report API}
+Controlled probes (a handful of requests each) established the facts in Table~\ref{tab:apifacts}, which were then used as design constraints.
+
+\begin{table}[H]
+\centering
+\caption{Measured behaviour of the report API and the design consequence}
+\label{tab:apifacts}
+\small
+\begin{tabular}{@{}p{0.46\textwidth}p{0.46\textwidth}@{}}
+\toprule
+Finding & Consequence \\
+\midrule
+A report for \emph{all districts} of a state and one commodity can be requested in one call. & One report per (state, commodity), not per market. \\
+The \texttt{commodity} parameter accepts exactly one commodity id. & Commodities cannot be batched in one report. \\
+A date span of up to 365 days is served in one report; any year since 2021 can be requested. & A year of history is one report per commodity. \\
+Pages of up to 5,000 rows are accepted. & Uttar Pradesh wheat ($\approx 85{,}000$ rows per year) needs 17--18 pages and one CAPTCHA. \\
+A commodity with no records returns HTTP 404 with the text ``No data available''. & An empty report is a valid result, not an error. \\
+An ``all states'' option exists in the state filter. & An all-states design is possible (Chapter~8). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Throttling and its classification}\label{sec:throttle}
+During an early probe about one third of requests seemed to fail the CAPTCHA. The cause turned out to be a different condition: after a burst of roughly 100 requests the portal answers with HTTP status 400, error code \texttt{TOKEN\_OR\_CAPTCHA\_REQUIRED} and the message ``too many requests'', and then sustains only about 1--2.5 requests per minute. The code is the same as for a wrong CAPTCHA, so the two must be told apart by the message text. Treating throttling as a CAPTCHA failure wastes CAPTCHA attempts and makes the situation worse. The client therefore distinguishes four conditions and handles them differently (Table~\ref{tab:errors}).
+
+\begin{table}[H]
+\centering
+\caption{Error classes and the collector's response}
+\label{tab:errors}
+\small
+\begin{tabular}{@{}p{0.2\textwidth}p{0.36\textwidth}p{0.36\textwidth}@{}}
+\toprule
+Condition & Detection & Response \\
+\midrule
+Wrong CAPTCHA & invalid-captcha message & Fetch a fresh image; give up on that report after three. The report is \emph{deferred}. \\
+Throttling & ``too many requests'' message & Stop the sweep; wait 15 minutes, then 30; slow the request pace. \\
+Outage & Network error or HTTP 5xx after five attempts & Wait and retry later; do not change the pace. \\
+Format change or denial & Non-JSON or unexpected shape; access denied & Pause collection and show it on the admin page. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{The request budget: why design matters}
+The cost of a plan is the number of CAPTCHA-solved reports (plus extra pages). The legacy plan (one report for each state--commodity--month) is
+\[
+  36\ \text{states}\times 605\ \text{commodities}\times 13\ \text{months}=283{,}140\ \text{reports}.
+\]
+At one to two reports per minute after the burst, this is months of continuous running. The plan used here collects, for a chosen state, \emph{one report per commodity for the whole year}. Uttar Pradesh needed 408 commodity windows (commodities in groups likely to report prices) and Rajasthan 150 (Table~\ref{tab:budget}). Of the roughly 1,100 report windows completed for the two states, 478 (43\%) were empty, which is why a state added later starts from the commodities already seen elsewhere (Section~\ref{sec:jobs}). Figure~\ref{fig:budget} compares the plans.
+
+\begin{table}[H]
+\centering
+\caption{Report windows needed by different plans}
+\label{tab:budget}
+\small
+\begin{tabular}{@{}p{0.5\textwidth}rp{0.3\textwidth}@{}}
+\toprule
+Plan & Reports & Note \\
+\midrule
+All states $\times$ commodities $\times$ months & 283,140 & Not feasible \\
+Uttar Pradesh, one report per commodity per year & 408 & Used; about 12 hours \\
+Rajasthan, seeded commodity list & 150 & Used; about 2.5 hours \\
+All states, one report per commodity (estimate) & 1,500--2,000 & Proposed (Chapter~8) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\safefig{03_request_budget.png}{0.85}
+\caption{Report windows required by each collection plan (logarithmic scale).}
+\label{fig:budget}
+\end{figure}
+
+\section{Collector design}
+\subsection{One window}
+A \emph{window} is one report: a state, a commodity and a date interval, fetched page by page, validated, and committed to the database in a single transaction. A window is skipped if it is already marked complete for the current job, which makes jobs resumable. If a report is larger than 250,000 rows it is split by date and each half is fetched separately.
+
+\begin{lstlisting}[caption={Fetching one window (simplified)}]
+function fetch_window(state, commodity, start, end, job):
+    if window_done(job, commodity, start, end): return
+    page = 1
+    rows = []
+    loop:
+        body = client.report(filters(state, commodity, start, end), page, limit=5000)
+        check body.current_page == page                  # detect a source change
+        if page == 1:
+            total, pages = body.total_count, body.total_pages
+            if total > 250000: split dates in half; recurse on each; return
+        check body.total_count == total and body.total_pages == pages
+        check this page is not a repeat of an earlier page
+        rows += body.rows
+        if page == pages: break
+        page += 1
+    check len(rows) == total
+    begin transaction
+        for each row: normalise, validate; good rows -> upsert, bad rows -> quarantine
+        mark window complete
+    commit
+\end{lstlisting}
+
+\subsection{A sweep with deferral}
+A \emph{sweep} fetches one window per commodity. A CAPTCHA failure defers only that commodity; throttling stops the sweep and defers everything that remains; an outage does the same without changing the pace.
+
+\begin{lstlisting}[caption={Sweep over commodities with deferral and pace adaptation}]
+function sweep(state, commodities, start, end, job):
+    deferred = []; throttled = False; outage = False
+    for each commodity c (biggest crops first):
+        try: fetch_window(state, c, start, end, job)
+        except CaptchaFailed:  deferred.append(c)
+        except Throttled:      deferred = commodities[c:]; throttled = True; break
+        except Unavailable:    deferred = commodities[c:]; outage = True; break
+    if not outage:
+        pace = pace * 1.5 if throttled else pace * 0.9      # clamp to [4, 30] seconds
+    return deferred
+
+# the job is retried after 15 minutes, then 30; up to 12 deferrals before it pauses
+\end{lstlisting}
+
+\subsection{Pace learning}
+The request interval starts at 7.5 seconds, is multiplied by 1.5 after a throttled sweep and by 0.9 after a clean one, and is kept between 4 and 30 seconds. It is stored in the database, so a restart continues with the learned pace. This is a simple multiplicative-increase / multiplicative-decrease rule; the portal's real limit is not published.
+
+\subsection{Single worker and resumability}
+A single worker thread runs one job at a time, and an operating-system file lock prevents two collector processes from running together. Jobs (kind, state, status, attempts, retry time) and completed windows are stored in the database. After a crash or restart, a job left ``running'' is re-queued, and its already completed windows are not fetched again. Short update jobs are placed ahead of a long history build so that daily freshness is not delayed.
+
+\section{Job types and schedule}\label{sec:jobs}
+\begin{table}[H]
+\centering
+\caption{Jobs and schedule (Indian Standard Time)}
+\label{tab:jobs}
+\small
+\begin{tabular}{@{}p{0.2\textwidth}p{0.22\textwidth}p{0.48\textwidth}@{}}
+\toprule
+Job & When & What it does \\
+\midrule
+History build & Once per state & One whole-year report per commodity. \\
+Daily update & 07:00 & Re-requests the last 14 days for commodities the state reported in the last 60 days. \\
+Weekly census & Sunday 03:00 & Last 30 days for active commodities plus the 40 least recently checked others, to discover new commodities. \\
+Forecast rebuild & 00:05 & Local only; makes ``tomorrow'' correct after midnight. \\
+\bottomrule
+\end{tabular}
+\end{table}
+The update re-requests 14 days, not one, because reports arrive late and fill in older dates afterwards (Chapter~4). A state added after Uttar Pradesh does not probe all 605 commodities: it starts from the commodities already seen in other states plus a short list of local specialities (for Rajasthan, for example, cumin, guar, isabgul, fenugreek seed and taramira); the weekly census finds the rest gradually.
+
+\paragraph{Why one update a day.} The initial design ran three updates a day. Evidence showed this was wasteful: states upload with a lag of days, a full 14-day recheck of Uttar Pradesh changed only 32 of 16{,}852 stored series (0.2\%) and no stored price was ever revised, and a Rajasthan recheck two to three hours after its history build changed 264 of 4{,}554 series (5.8\%). The schedule was therefore reduced to one update per state per day, and a table of rows added per data date after each update (the ``arrival log'') was added to tune the time of day from evidence.
+
+\section{Observed collection performance}\label{sec:perf}
+\begin{table}[H]
+\centering
+\caption{Collection effort for the two states}
+\label{tab:effort}
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+& Uttar Pradesh & Rajasthan \\
+\midrule
+History windows requested & 408 & 150 \\
+Wall-clock time for the history build & about 12 hours & about 2.5 hours \\
+Full 14-day update (not throttled) & about 8 minutes (105 commodities) & -- \\
+Full 14-day update (throttled) & -- & about 52 minutes (94 commodities) \\
+\bottomrule
+\end{tabular}
+\end{table}
+Across both states, about 1,100 windows were completed (602 with data, 17 with some rejected rows, 478 empty). Over the same period the collector logged 9 throttling and 3 CAPTCHA diagnostic events; throttling, not CAPTCHA recognition, is the binding constraint.
+
+\section{Failure modes met in practice}\label{sec:failures}
+Real operation exposed problems that unit tests alone had not:
+\begin{enumerate}
+  \item \textbf{Throttling mistaken for CAPTCHA failure} (Section~\ref{sec:throttle}): fixed by classifying on the message text.
+  \item \textbf{A network error paused collection} for good after one retry, which would have silently skipped the next scheduled run. Outages are now a retryable class (Table~\ref{tab:errors}).
+  \item \textbf{Stale cached lists}: after a speed optimisation, the forecast job read an out-of-date list of series and forecast only about 500 of 1,723 Rajasthan series. Forecast building now always reads current data, and a regression test was added.
+  \item \textbf{Changed logic with old cached results}: forecasts are cached per series, date, data revision and \texttt{model\_version}; changing the forecasting logic without changing the version served stale forecasts. The version must be changed with every change in logic.
+  \item \textbf{My own probes competing with the collector} for the same request allowance, which throttled a scheduled update; probes are now spaced from collection.
+\end{enumerate}
+
+\section{Responsible use}\label{sec:responsible}
+The portal serves public government data. The collector keeps to one request at a time, learns a conservative pace, backs off when told to, does not use third-party CAPTCHA-solving services, and archives raw pages only for the history build to avoid repeated downloads. Before any wider deployment the portal's terms of use should be checked and the request rate kept within what the operators tolerate.
+
+% ============================== CHAPTER 4 ==============================
+\chapter{Data Management and Exploratory Analysis}
+
+\section{Storage and validation}
+Data are stored in a single SQLite database in write-ahead-logging mode \cite{sqlitewal}. Each fetched row is normalised and validated before it is stored: the date must parse and lie inside the requested interval; state, commodity and (when requested) market must match the request; the price unit must be recognised and is converted to rupees per quintal; minimum, modal and maximum must be ordered ($\text{min}\le\text{modal}\le\text{max}$); missing variety or grade becomes ``Not reported''. Rows failing validation go to a \emph{quarantine} table with the reason, instead of being dropped or guessed. For the two states, 3{,}414 rows were quarantined, 3{,}387 of them because the unit was ``Rs./Bundle'' (a unit that cannot be converted to a per-quintal price) and 27 because prices were out of order.
+
+\begin{table}[H]
+\centering
+\caption{Main database tables (details in Appendix~C)}
+\label{tab:tables}
+\small
+\begin{tabular}{@{}p{0.27\textwidth}p{0.65\textwidth}@{}}
+\toprule
+Table & Purpose \\
+\midrule
+\texttt{observations} & One validated price row per (date, state, district, market, commodity, variety, grade). \\
+\texttt{series\_state} & One row per series with a revision counter that increases when data change. \\
+\texttt{batches}, \texttt{pages} & Report windows and the archived raw pages. \\
+\texttt{quarantine}, \texttt{revisions} & Rejected rows with reasons; logged price corrections. \\
+\texttt{app\_runs}, \texttt{app\_windows} & Persistent jobs and completed windows (resumability). \\
+\texttt{app\_forecasts} & Cached forecasts keyed by series, target date, revision and model version. \\
+\texttt{app\_arrivals} & Rows per data date after each update (the arrival log). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+An existing row is updated if the same observation is fetched again; if any of its prices differ, the previous version is written to \texttt{revisions}. No revision has been recorded so far, which supports the finding that already published prices are not corrected.
+
+\section{Definition of a series}
+A \emph{series} is a market, commodity, variety and grade (Figure~\ref{fig:example} shows one). Its identity is a SHA-256 hash of the six fields state, district, market, commodity, variety and grade (compared without regard to letter case), so the same series is always recognised across fetches. For a series with reported dates $O\subset\{1,\dots,T\}$, the daily value is
+\[
+  y_t=\begin{cases}\text{reported modal price}, & t\in O,\\ \text{missing}, & t\notin O.\end{cases}
+\]
+Missing days are kept as gaps. They are never filled by interpolation and never treated as zero or as a repeated price, because a missing report is not evidence that the price did not change.
+
+\begin{table}[H]
+\centering
+\caption{Data collected (as of 27 October 2026)}
+\label{tab:data}
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+& Uttar Pradesh & Rajasthan \\
+\midrule
+Validated price rows & about 488{,}000 & about 197{,}000 \\
+Period & 27 Oct 2025 -- 27 Oct 2026 & 28 Oct 2025 -- 27 Oct 2026 \\
+Commodities & 97 & 90 \\
+Markets / districts & 251 / 73 & 160 / 37 \\
+Series reported in the last 30 days & 4{,}912 & 1{,}732 \\
+\bottomrule
+\end{tabular}
+\end{table}
+A small Maharashtra pilot (about 8{,}700 rows) is kept in the database but is not shown.
+
+\section{Reporting lag}
+Table~\ref{tab:lag} and Figure~\ref{fig:lag} show the number of rows stored for each recent data date shortly after an update on 27 October 2026. Counts for Uttar Pradesh fall from about 1,300--1,600 per date up to 21 October to under 200 per date from 22 October, and keep shrinking towards the present: the newest days are not yet uploaded. Rajasthan's counts are much more complete for recent days. Sundays (18 and 25 October) have fewer rows in both states.
+
+\begin{table}[H]
+\centering
+\caption{Stored rows per data date, 27 October 2026 snapshot}
+\label{tab:lag}
+\small
+\begin{tabular}{@{}lrrlrr@{}}
+\toprule
+Date & UP & Rajasthan & Date & UP & Rajasthan \\
+\midrule
+13 Oct & 1{,}597 & 807 & 21 Oct & 1{,}442 & 879 \\
+14 Oct & 1{,}614 & 798 & 22 Oct & 199 & 840 \\
+15 Oct & 1{,}531 & 811 & 23 Oct & 198 & 723 \\
+16 Oct & 1{,}568 & 744 & 24 Oct & 173 & 456 \\
+17 Oct & 1{,}592 & 461 & 25 Oct (Sun) & 93 & 121 \\
+18 Oct (Sun) & 1{,}266 & 108 & 26 Oct & 95 & 580 \\
+19 Oct & 1{,}351 & 536 & 27 Oct & 30 & 64 \\
+20 Oct & 1{,}304 & 461 & & & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\safefig{04_arrival_lag.png}{0.92}
+\caption{Rows stored per data date for Uttar Pradesh and Rajasthan: recent dates in Uttar Pradesh are still largely missing.}
+\label{fig:lag}
+\end{figure}
+
+For forecasting, the consequence is direct. Among the series that receive a forecast on 27 October, 445 of 655 Uttar Pradesh series had their latest report 6 days earlier, while most Rajasthan series had a report 0--1 days old (Section~\ref{sec:howmany}).
+
+\begin{figure}[H]
+\centering
+\safefig{05_example_series.png}{0.92}
+\caption{A typical price series (one market and commodity) with unreported days left as gaps, not filled.}
+\label{fig:example}
+\end{figure}
+
+\section{Stickiness and heterogeneity}
+Two properties of mandi prices determine which models work. First, prices are \emph{sticky}: the same modal price is often reported on consecutive days and then changes by a step. Second, series differ enormously in level (for example a few hundred rupees per quintal for some vegetables to tens of thousands for spices), so an error in rupees is dominated by expensive crops. For this reason MAPE is reported alongside MAE and RMSE when results from many series are pooled.
+
+% ============================== CHAPTER 5 ==============================
+\chapter{Forecasting Methodology}
+
+\section{Set-up}\label{sec:setup}
+Fix a series with daily values $y_t$ (some missing). Let $\tau$ be the forecast date (today) and $T$ the day of the latest report, so the \emph{age} of the data is $a=\tau-T\ge 0$. The target is the price on day $\tau+1$, which is $h=a+1$ days after the last report. When the data are current ($a=0$), the forecast is one day ahead; for a series whose last report is six days old, it is a seven-day-ahead forecast, and the website shows the age and a wider range.
+
+\paragraph{Training window.} Only the latest $W=180$ days up to $\tau$ are used. A 365-day window was tested and was worse (Section~\ref{sec:rules}).
+
+\paragraph{Eligibility.} A forecast is produced only if (i) the window contains at least 60 reported days, (ii) at least 15 of the last 30 days were reported, and (iii) the latest report is at most 7 days old. Otherwise the website shows the history and a reason (``insufficient history'' or ``delayed'').
+
+\section{Candidate models}
+Let $y_{(1)},\dots,y_{(n)}$ be the reported prices in time order. All models use only reported prices dated before the forecast origin. Each produces a point forecast $\hatt{y}$ for horizon $h$.
+
+\begin{enumerate}
+  \item \textbf{Last price (persistence).} $\hatt{y}=y_{(n)}$. It is the standard baseline for sticky series and reacts at once to a change, but also repeats a one-off error.
+  \item \textbf{Median of the last five.} $\hatt{y}=\med\{y_{(n-4)},\dots,y_{(n)}\}$. Robust to a single unusual price; the default model when a series is too short to select.
+  \item \textbf{Seven-day mean.} The mean of the prices reported in the last seven calendar days up to the forecast date (the last price if there is none). It smooths noise at the cost of lag.
+  \item \textbf{Exponential smoothing,} $\alpha\in\{0.3,0.6\}$ \cite{gardner1985}:
+  \begin{equation}
+    \ell_1=y_{(1)},\qquad \ell_i=\alpha\,y_{(i)}+(1-\alpha)\,\ell_{i-1},\qquad \hatt{y}=\ell_n,
+    \label{eq:es}
+  \end{equation}
+  updated on reported days only; the forecast is flat. A larger $\alpha$ reacts faster.
+  \item \textbf{Adaptive Kalman filter with a local linear trend} (below).
+\end{enumerate}
+
+\subsection{Adaptive Kalman filter}
+The hidden state is $x_t=(\ell_t,b_t)\trans$, a price level and a daily trend, observed through the level only. On each calendar day the state moves by
+\begin{equation}
+  x_t=Fx_{t-1}+w_t,\quad F=\begin{bmatrix}1&1\\0&1\end{bmatrix},\quad
+  y_t=\begin{bmatrix}1&0\end{bmatrix}x_t+v_t,
+  \label{eq:kf}
+\end{equation}
+with process noise $w_t\sim(0,Q)$, $Q=\operatorname{diag}(q,\,0.01q)$, and observation noise $v_t\sim(0,r)$. Let $P=\begin{bmatrix}p_{11}&p_{12}\\p_{12}&p_{22}\end{bmatrix}$ be the state covariance. One day of prediction gives the predicted state $\bar x=F\hatt{x}$ with level $\bar\ell=\ell+b$ and trend $\bar b=b$, and the predicted covariance
+\begin{equation}
+  \bar P=FPF\trans+Q:\qquad \bar p_{11}=p_{11}+2p_{12}+p_{22}+q,\quad \bar p_{12}=p_{12}+p_{22},\quad \bar p_{22}=p_{22}+0.01q.
+\end{equation}
+If the day has a report $y_t$, the innovation, its variance and the gain are
+\begin{equation}
+  e=y_t-\bar\ell,\qquad S=\bar p_{11}+r,\qquad K=\begin{bmatrix}K_1\\K_2\end{bmatrix}=\frac{1}{S}\begin{bmatrix}\bar p_{11}\\\bar p_{12}\end{bmatrix},
+\end{equation}
+and the state and covariance are corrected by
+\begin{equation}
+  \ell\leftarrow\bar\ell+K_1e,\quad b\leftarrow\bar b+K_2e,\quad
+  p_{11}\leftarrow(1-K_1)\bar p_{11},\quad p_{12}\leftarrow(1-K_1)\bar p_{12},\quad p_{22}\leftarrow\bar p_{22}-K_2\bar p_{12}.
+\end{equation}
+On a day \emph{without} a report the filter performs the prediction step only, so its covariance grows and no value is invented.
+
+The noise levels adapt online. Since $\E[e^2]=\bar p_{11}+r$ for a correctly specified model, the observation noise is tracked by
+\begin{equation}
+  r\leftarrow\operatorname{clip}\bigl(0.95\,r+0.05\max\{0.01\,s,\ e^2-\bar p_{11}\},\ 0.01\,s,\ 100\,s\bigr),
+  \label{eq:r}
+\end{equation}
+and the process noise by $q\leftarrow\operatorname{clip}\bigl(0.98q+0.02(K_1e)^2,\ 0.001s,\ 10s\bigr)$, where $s=\max\{1,0.03\,y_{(1)}\}^2$ is a scale set from the first price and $\operatorname{clip}(x,\text{lo},\text{hi})$ limits $x$ to $[\text{lo},\text{hi}]$. The filter starts with level $y_{(1)}$, trend 0, $p_{11}=s$, $p_{12}=0$, $p_{22}=s/20$, $r=s$ and $q=0.02s$. The $h$-step forecast is $\max\{0,\ \ell+h\,b\}$.
+
+\begin{lstlisting}[caption={Adaptive Kalman recursion on a daily grid with gaps (simplified)}]
+level = first_price; trend = 0; (p11, p12, p22) = (s, 0, s/20); r = s; q = 0.02 * s
+for each calendar day after the first reported day:
+    level = level + trend                              # prediction
+    (p11, p12, p22) = (p11 + 2*p12 + p22 + q,  p12 + p22,  p22 + 0.01*q)
+    if no report that day: continue                    # covariance grows, no value invented
+    e  = price - level
+    S  = p11 + r;   K1 = p11 / S;   K2 = p12 / S
+    r  = clip(0.95*r + 0.05*max(0.01*s, e*e - p11), 0.01*s, 100*s)   # uses the predicted p11
+    level += K1 * e;   trend += K2 * e
+    (p11, p12, p22) = ((1 - K1)*p11,  (1 - K1)*p12,  p22 - K2*p12)
+    q  = clip(0.98*q + 0.02*(K1*e)**2, 0.001*s, 10*s)
+forecast(h) = max(0, level + h * trend)
+\end{lstlisting}
+
+\section{Model selection by rolling-origin back-test}
+For each series and horizon $h$, a day $i$ is a valid \emph{origin} if at least 60 prices have been reported up to $i$, at least 20 of the last 30 days were reported, a price was reported in the last three days, and the price on day $i+h$ is known. The latest 60 origins are used. At every origin $i$ every model forecasts day $i+h$ \emph{using only data up to $i$}, giving errors $e_{m,i}=\hatt{y}^{(m)}_{i+h|i}-y_{i+h}$.
+
+With $n$ origins ($n\ge 20$), the last $n_h=\min\{30,\lfloor n/2\rfloor\}$ are held out. The model with the lowest mean absolute error on the earlier origins is chosen,
+\begin{equation}
+  m^\star=\argmin_{m}\ \frac{1}{n-n_h}\sum_{i\le n-n_h}|e_{m,i}|,
+  \label{eq:select}
+\end{equation}
+and its accuracy is \emph{reported on the held-out origins only}, which it has not influenced (Figure~\ref{fig:backtest}). With fewer than 20 origins there is no selection and the median of the last five is used. Because $h=a+1$, a series whose last report is old is tested at that same horizon.
+
+\begin{figure}[H]
+\centering
+\safefig{06_backtest_scheme.png}{0.92}
+\caption{Rolling-origin back-test: earlier origins select the model; the last 30 origins score it.}
+\label{fig:backtest}
+\end{figure}
+
+\begin{lstlisting}[caption={Per-series forecast (simplified)}]
+function forecast(series, today):
+    pts = daily grid of the last 180 days up to today (gaps kept)
+    age = today - last_reported_day
+    if age > 7:                                    return "delayed"
+    if reported(pts) < 60 or reported_last30(pts) < 15: return "insufficient"
+    h = age + 1
+    records = for each valid origin i (latest 60): errors of all 6 models at horizon h
+    m = best model on records[: n - hold] by MAE     (default: median of last 5)
+    price = predict(pts, m, h)
+    width = interval_width(errors of m, mean_price, h)
+    return price, [max(0, price - width), price + width], m, held-out metrics
+\end{lstlisting}
+
+\section{Prediction interval}
+Let $E=\{|e_{m^\star,i}|\}$ be the absolute errors of the chosen model at the same horizon, $N=|E|$. The half-width is
+\begin{equation}
+  w=\max\Bigl\{\,c\cdot q_{0.95}(E),\ 0.05\,\bar y\sqrt{h}\Bigr\},\quad c=1.3,
+  \label{eq:width}
+\end{equation}
+where $q_{0.95}$ is the interpolated empirical 95th percentile and $\bar y$ is the mean actual price at the origins. If $8\le N<20$ the percentile is replaced by $1.96\,\mathrm{RMSE}$; if $N<8$ the width is $\max\{1.96\,\sigma_\Delta,\ 0.05\,y_{(n)}\}\sqrt{h}$, where $\sigma_\Delta$ is the root-mean-square day-to-day price change. The interval is $[\max\{0,\hatt{y}-w\},\ \hatt{y}+w]$.
+
+The inflation factor $c$ and the 5\% floor exist for two reasons. Selecting the best of six models on past errors makes the past errors look smaller than future ones, and sticky prices give some series nearly zero past errors. A textbook normal interval $\hatt{y}\pm1.96\sigma$ covered only 87--91\% of held-out actual prices; the form in~\eqref{eq:width} reaches 95--97\%. To keep the check honest, the width used for coverage tests is computed from the selection origins only and applied to the held-out origins.
+
+\section{Evaluation measures}
+For $N$ forecasts with actual prices $y_t$ and forecasts $\hatt{y}_t$,
+\begin{equation}
+  \mathrm{MAE}=\frac1N\sum|y_t-\hatt{y}_t|,\quad
+  \mathrm{RMSE}=\sqrt{\frac1N\sum(y_t-\hatt{y}_t)^2},\quad
+  \mathrm{MAPE}=\frac{100}{N}\sum\Bigl|\frac{y_t-\hatt{y}_t}{y_t}\Bigr|,
+\end{equation}
+discussed in \cite{hyndman2006}. Results over many series are pooled by weighting each series by its number of held-out tests. \emph{Coverage} is the fraction of held-out actual prices inside the 95\% range.
+
+\section{Why several simple models}
+A series has at most a few hundred points, with gaps. A flexible model fitted to such data overfits, and thousands of series cannot be tuned individually by hand. A small set of robust models with an automatic, honest selection step is a practical compromise, in line with the competition evidence that simple methods are strong \cite{makridakis2020}.
+
+% ============================== CHAPTER 6 ==============================
+\chapter{Experiments and Results}
+
+\section{Protocol}
+All figures in this chapter are \emph{out-of-sample}: each series is evaluated on its 30 latest origins, which the selection did not use, with training always limited to earlier data. The data are as of 27 October 2026; 655 Uttar Pradesh series and 429 Rajasthan series had a forecast that day, giving 14{,}240 and 6{,}698 held-out tests respectively.
+
+\section{Accuracy of the models}
+Tables~\ref{tab:upacc} and~\ref{tab:rjacc} give the pooled results and Figure~\ref{fig:mae} plots them.
+\begin{table}[H]
+\centering
+\caption{Held-out accuracy, Uttar Pradesh (14,240 tests, 655 series). Best value in each column in bold.}
+\label{tab:upacc}
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Model & MAE (Rs.) & RMSE (Rs.) & MAPE (\%) \\
+\midrule
+Adaptive Kalman & 182.1 & 912.8 & 5.93 \\
+Last price & 155.1 & 980.7 & 5.00 \\
+Median of last 5 & \textbf{135.6} & 818.7 & \textbf{4.62} \\
+7-day mean & 143.8 & \textbf{786.0} & 4.86 \\
+Exponential smoothing (0.3) & 140.5 & 786.5 & 4.72 \\
+Exponential smoothing (0.6) & 142.7 & 854.4 & 4.69 \\
+\midrule
+Per-series choice & 137.3 & 819.5 & 4.62 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Held-out accuracy, Rajasthan (6,698 tests, 429 series).}
+\label{tab:rjacc}
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Model & MAE (Rs.) & RMSE (Rs.) & MAPE (\%) \\
+\midrule
+Adaptive Kalman & 225.9 & 483.4 & 6.39 \\
+Last price & 217.2 & 529.7 & 6.16 \\
+Median of last 5 & 216.4 & 473.3 & 6.21 \\
+7-day mean & 223.2 & 464.8 & 6.45 \\
+Exponential smoothing (0.3) & 219.7 & \textbf{458.5} & 6.30 \\
+Exponential smoothing (0.6) & \textbf{208.0} & 466.6 & \textbf{5.98} \\
+\midrule
+Per-series choice & 216.6 & 477.8 & 6.10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\safefig{07_model_mae.png}{0.95}
+\caption{Held-out MAE of each model and of the per-series choice, for Uttar Pradesh and Rajasthan.}
+\label{fig:mae}
+\end{figure}
+
+\paragraph{Which models were chosen.} The number of series (Uttar Pradesh / Rajasthan) that chose each model: median of last 5, 307 / 256; last price, 116 / 59; seven-day mean, 73 / 23; exponential smoothing 0.3, 54 / 35; exponential smoothing 0.6, 52 / 33; Kalman filter, 53 / 23.
+
+\section{Discussion}
+\begin{enumerate}
+  \item \textbf{The Kalman filter is the weakest model on both states.} In Uttar Pradesh its MAE is about 34\% higher than the median of the last five prices (182.1 versus 135.6), and in Rajasthan about 9\% higher than the best model (225.9 versus 208.0). With sticky prices followed by jumps, a trend estimate extrapolates noise.
+  \item \textbf{Simple robust models win.} The median of recent prices and the exponential smoothers are the best fixed choices. The best fixed model differs between the states (median in Uttar Pradesh, smoothing with $\alpha=0.6$ in Rajasthan), which motivates selection.
+  \item \textbf{Per-series selection did not clearly beat the best fixed model.} In Uttar Pradesh it is about 1\% worse than the median (137.3 versus 135.6); in Rajasthan it is about equal to the median but worse than smoothing with $\alpha=0.6$. Its value is robustness: it avoids committing every series to a model that is bad for some of them, such as the Kalman filter. An earlier, smaller sample had suggested a larger gain, and the full data did not confirm it.
+  \item \textbf{Honest conclusion.} For sticky mandi prices over short horizons, a median of recent prices is a strong forecaster; extra model complexity does not pay. No formal significance test between models was carried out, so differences of a few percent should not be over-interpreted.
+\end{enumerate}
+
+\section{Interval coverage}
+Out of 13{,}317 held-out tests in Uttar Pradesh, 97.0\% of actual prices lay inside the 95\% range; in Rajasthan, 94.9\% of 5{,}245 did. The range is slightly cautious in Uttar Pradesh and on target in Rajasthan. Table~\ref{tab:inflation} shows that coverage was almost insensitive to the inflation factor, because the 5\% floor dominates for the many series with near-constant prices.
+
+\begin{table}[H]
+\centering
+\caption{Coverage (\%) for different inflation factors $c$ in~\eqref{eq:width}, by the number of reported days in the last 30}
+\label{tab:inflation}
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+$c$ & $\ge 20$ reported days & 15--19 reported days \\
+\midrule
+1.3 (used) & 97.0 & 96.7 \\
+1.2 & 96.7 & 96.5 \\
+1.1 & 96.3 & 96.1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{How many series can be forecast}\label{sec:howmany}
+On 27 October 2026, of 4,912 Uttar Pradesh series reporting in the last 30 days, 655 had a forecast, 2,897 were \emph{delayed} (latest report older than 7 days) and 1,360 had insufficient history; of 1,732 Rajasthan series, 429 had a forecast, 466 were delayed and 837 had insufficient history. Among the 655 Uttar Pradesh forecasts, 445 rest on a report six days old, so the ``tomorrow'' forecast there is in fact a seven-day-ahead forecast, which the website states; among Rajasthan forecasts, 339 of 429 rest on a report no older than one day. Figure~\ref{fig:status} shows the split. The main limit on coverage is therefore the portal's reporting lag and the sparse reporting of many markets, not the models.
+
+\begin{figure}[H]
+\centering
+\safefig{08_forecast_status.png}{0.85}
+\caption{Number of series with a forecast, delayed, and with insufficient history, for each state.}
+\label{fig:status}
+\end{figure}
+
+\section{Experiments that set the rules}\label{sec:rules}
+\paragraph{Freshness limit.} Requiring a report no older than two days left 97\% of Uttar Pradesh series without a forecast. Allowing up to seven days, with back-tests at the matching horizon and a wider range, kept held-out coverage near 95\% while greatly increasing the number of forecasts.
+
+\paragraph{Reported-day requirement.} Lowering the requirement of 20 reported days in the last 30 to 15 admitted about 250 more series with the same accuracy (Table~\ref{tab:gate}). Series with 10--14 days had too few tests and ranges around $\pm 24\%$; series with fewer than 60 reported days cannot be back-tested at all and had ranges of $\pm 27$ to $\pm 39\%$.
+
+\begin{table}[H]
+\centering
+\caption{Held-out results by number of reported days in the last 30 (Uttar Pradesh)}
+\label{tab:gate}
+\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+Reported days & Series & MAE chosen & MAE last price & Coverage (\%) & Tests \\
+\midrule
+$\ge 20$ & 401 & 130.5 & 150.1 & 97.0 & 9{,}598 \\
+15--19 & 253 & 155.2 & 167.1 & 96.7 & 3{,}681 \\
+10--14 & 217 & 153.1 & 160.7 & 97.3 & 1{,}019 \\
+8--9 & 58 & 168.1 & 161.3 & 98.1 & 214 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Window length.} With 365 days of history instead of 180, 65 more series qualified, but on the same 654 series the average error was about 10\% worse (MAE 151.4 against 137.9), and 128 of 654 series chose a different model. Old months pull short-memory models toward old price levels, so 180 days is used.
+
+% ============================== CHAPTER 7 ==============================
+\chapter{System Implementation: Website and Operation}
+
+\section{Architecture}
+The system is a single Python application (Figure~\ref{fig:architecture}) with the parts listed in Table~\ref{tab:components}; the tables it keeps are listed in Table~\ref{tab:tables}, the jobs in Table~\ref{tab:jobs} and the effort spent collecting in Tables~\ref{tab:effort} and~\ref{tab:data}.
+
+\begin{table}[H]
+\centering
+\caption{Components}
+\label{tab:components}
+\small
+\begin{tabular}{@{}p{0.2\textwidth}p{0.4\textwidth}p{0.28\textwidth}@{}}
+\toprule
+Component & Role & Technology \\
+\midrule
+Source client & Requests, CAPTCHA, tickets, retries & Python \texttt{requests}, Pillow, NumPy \\
+Storage & Validated rows, jobs, forecasts & SQLite (WAL) \\
+Job service & History, update, census, forecast jobs & Python, file lock \\
+Forecasting & Six models, selection, interval & Pure Python \\
+Web service & JSON API, pages, scheduler & FastAPI \cite{fastapi}, uvicorn, APScheduler \\
+Pages & Farmer page, admin page & Plain JavaScript, SVG \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Opening a page never triggers scraping: pages only read stored data. Forecasts are computed after each update and cached, so a visit is a quick read.
+
+\section{The farmer page}
+The filters follow the official portal: Commodity Group, Commodity, Variety, Grade, District and Market; the state is chosen with a toggle. Variety and grade appear only when there is more than one option. Figures~\ref{fig:upage} and~\ref{fig:rpage} show the page. It presents tomorrow's expected price, the 95\% range, the change from the latest reported price, the date and age of the latest report, a price history chart (30, 90 or 180 days) with the forecast and its range, the latest reported prices, a CSV download of the stored history, and a collapsible explanation of how the forecast was made, including the back-test table and measured coverage. The text is available in English and Hindi. When the latest report is two or more days old, a notice says that the forecast is less certain and its range wider. A checkbox, ``Only markets with a forecast'', limits the lists to series that have one.
+
+\begin{figure}[H]
+\centering
+\safefig{09_farmer_page_up.png}{0.80}
+\caption{Farmer page for an Uttar Pradesh market: forecast, range, history chart and filters.}
+\label{fig:upage}
+\end{figure}
+\begin{figure}[H]
+\centering
+\safefig{10_farmer_page_rajasthan.png}{0.80}
+\caption{Farmer page for Rajasthan in Hindi, with the state toggle.}
+\label{fig:rpage}
+\end{figure}
+
+\section{Admin page and operational monitoring}
+The administration page (Figure~\ref{fig:admin}), reachable only from the machine running the server, shows the last successful update per state, running and waiting jobs, errors and throttling events, per-state counts, the series that are delayed, the pooled accuracy of the stored forecasts, and the arrival log. Buttons start an update, the weekly census, a forecast rebuild or a history rebuild for a chosen state, and resume collection after a pause.
+
+\begin{figure}[H]
+\centering
+\safefig{11_admin_page.png}{0.85}
+\caption{Administration page: jobs, per-state coverage, data-arrival log and model performance.}
+\label{fig:admin}
+\end{figure}
+
+\section{Performance}
+Listing the filter options of a state requires scanning about 17{,}000 series. The page remained fast because the lists are cached and, when a cached list is stale, the previous list is served while one background thread rebuilds it, so a visitor never waits behind the collector. After each job the lists are rebuilt before the next visitor arrives. Typical response times after this change were 10--30 milliseconds.
+
+\section{Testing}
+The project has 80 automated tests. They cover the client (tickets, throttling), storage (validation, quarantine, revisions), the job service (resumption, deferral, backoff, pacing, outages, rollover), the forecasting rules (causality, staleness, calibration), multi-state behaviour, the cache and the API. A test fails when the corresponding bug is reintroduced, as shown for the stale-list and cache-refresh defects of Section~\ref{sec:failures}.
+
+\section{Deployment status}
+At present the server runs on one personal computer and is reachable only from it. It must stay powered and connected for the scheduled jobs to run, and it stops if the session that started it is closed. Public hosting requires an always-on server, HTTPS, password protection of the admin page (which is currently restricted by client address and would be exposed behind a reverse proxy), backups and a test of whether the portal accepts requests from a cloud address. These steps are estimated at one to two days and are listed under future work.
+
+% ============================== CHAPTER 8 ==============================
+\chapter{Limitations and Future Work}
+
+\section{Limitations}
+\begin{itemize}
+  \item \textbf{Coverage.} Only about 13\% of Uttar Pradesh and 25\% of Rajasthan series can be forecast; the rest are delayed or too sparse. Uttar Pradesh's forecasts are mostly a week ahead.
+  \item \textbf{Information used.} Only past modal prices; no arrivals, weather, policy or neighbouring markets.
+  \item \textbf{Short history.} One year of data, so no seasonal model.
+  \item \textbf{Selection gain.} Per-series selection does not beat the best fixed model; the evidence is pooled and no significance test was carried out.
+  \item \textbf{Intervals.} Coverage is measured, not guaranteed, and the inflation factor and floor were tuned on the same states.
+  \item \textbf{Source dependence.} The method relies on the portal's response format, CAPTCHA and rate limits, which may change; scraping stops working if they do.
+  \item \textbf{Deployment.} Single machine, not yet public.
+\end{itemize}
+
+\section{Future work}
+\begin{itemize}
+  \item \textbf{Seasonality from earlier years.} Probes showed that earlier years are available: for Uttar Pradesh wheat, 44{,}605 rows for 2022, 42{,}388 for 2024 and 38{,}819 for January--October 2025; for Rajasthan wheat 18{,}306 rows for 2024. In a sample of 2024 Uttar Pradesh wheat, 209 of 211 markets matched today's markets, with the same price unit. Collecting these years allows a year-on-year view, a typical-month price index and a weeks-to-months outlook. Seasonality changes slowly, so it would not alter tomorrow's forecast, and it should be tested before it is claimed to help at weekly or monthly horizons.
+  \item \textbf{All 36 states.} Collecting one report per commodity for all states together (the portal accepts an all-states filter) would reduce history collection from roughly 6{,}000 reports to about 1{,}500--2{,}000 and a daily update to about 400 reports. Collecting state by state would need about 3{,}500 reports a day for updates, which does not fit within the portal's rate. Estimated time: four to five days including about one to one and a half days of collection.
+  \item \textbf{Hosting.} An always-on server with HTTPS, protected admin page and backups.
+  \item \textbf{Better use of the arrival log.} Choose the daily update time, or add a second run for fast-reporting states such as Rajasthan, from measured data.
+  \item \textbf{Richer models and evaluation.} Pooled models across markets, exogenous variables, rolling significance tests and interval scores \cite{gneiting2007}.
+\end{itemize}
+
+% ============================== CHAPTER 9 ==============================
+\chapter{Conclusion}
+This project built, from an interface that offers only one CAPTCHA-protected report at a time, a working system that keeps price data for two Indian states up to date and forecasts the next day's mandi price with a stated range. The engineering insight was that the number of CAPTCHA-solved reports, not rows, is the cost: one report per commodity per state-year reduces the effort from a naive 283{,}140 reports to a few hundred, and a collector that classifies throttling, outages and CAPTCHA failures separately, paces itself and resumes completed work keeps the data current without supervision.
+
+The forecasting results are modest and are reported as such. Short, gappy, sticky price series are best predicted by simple robust methods: the median of recent prices is hard to beat, the Kalman filter is the weakest of the six models tried, and per-series selection mainly protects against a bad choice instead of improving accuracy. The 95\% ranges were calibrated against held-out data and reach about 95--97\% coverage. The largest limit on usefulness is not the model but the portal's reporting lag, which leaves most series without a current report.
+
+The next steps are clear: collect earlier years to show seasonal patterns, move the application to an always-on host, and extend the collector to the remaining states with an all-states design.
+
+% ============================== APPENDIX ===============================
+\appendix
+\chapter{Notation}
+\begin{longtable}{@{}p{0.22\textwidth}p{0.72\textwidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endfirsthead
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$y_t$ & Reported modal price on day $t$ (missing if not reported). \\
+$\tau,\ T,\ a$ & Forecast date, day of the latest report, and age $a=\tau-T$. \\
+$h$ & Forecast horizon in days, $h=a+1$. \\
+$W$ & Length of the training window, 180 days. \\
+$\ell,\ b$ & Level and trend states of the Kalman filter. \\
+$P=\begin{bmatrix}p_{11}&p_{12}\\p_{12}&p_{22}\end{bmatrix}$ & Kalman state covariance. \\
+$q,\ r$ & Process and observation noise scales of the Kalman filter. \\
+$e_{m,i}$ & Error of model $m$ at origin $i$. \\
+$m^\star$ & Selected model for a series. \\
+$c$ & Interval inflation factor, 1.3. \\
+$w$ & Half-width of the 95\% range. \\
+\bottomrule
+\end{longtable}
+
+\chapter{API Summary}
+\begin{longtable}{@{}p{0.42\textwidth}p{0.5\textwidth}@{}}
+\toprule
+Endpoint & Purpose \\
+\midrule
+\endfirsthead
+\toprule
+Endpoint & Purpose \\
+\midrule
+\endhead
+\texttt{GET /api/status} & Collection state per state, last update, running job. \\
+\texttt{GET /api/selections?state=} & Filter options for one state; flags series with a forecast. \\
+\texttt{GET /api/series/\{id\}/history?days=} & Reported prices of one series. \\
+\texttt{GET /api/series/\{id\}/forecast} & Forecast, range, model and back-test results. \\
+\texttt{GET /api/series/\{id\}/history.csv} & Full stored history as CSV. \\
+\texttt{GET /api/admin/status} & Admin only: jobs, errors, per-state counts, arrival log. \\
+\texttt{POST /api/admin/enqueue?kind=\&state=} & Admin only: start a job. \\
+\bottomrule
+\end{longtable}
+
+\chapter{Database Schema (Simplified)}
+\begin{lstlisting}[caption={Main tables}]
+observations(key PK, date, state, district, market, commodity, variety, grade,
+             min_price, max_price, modal_price, unit, payload)
+series_state(id PK, dimensions, revision, updated)
+batches(id PK, state_id, commodity_id, start, end, status, rows, valid, rejected, updated)
+quarantine(batch_id, reason, raw, created)
+revisions(observation_key, previous_payload, new_payload, created)
+app_runs(id PK, kind, state, status, attempt, created, started, finished,
+         retry_at, detail, progress, total)
+app_windows(run_id, window_key, status, batch_id)
+app_forecasts(series_id, target_date, revision, model_version, generated, payload)
+app_arrivals(id PK, run_id, state, kind, at, changed_series, newest, counts)
+app_settings(key PK, value)
+\end{lstlisting}
+
+\chapter{Job Selection and Retry Policy}
+\begin{lstlisting}[caption={Worker loop (simplified)}]
+loop every 10 seconds:
+    take the oldest queued job (or retry-wait job whose time has come),
+        history builds last, so short updates go first
+    run it; on success mark succeeded and rebuild the farmer lists
+    on failure:
+        throttling or outage -> retry in 15 min, then 30 min (up to 12 times)
+        CAPTCHA deferrals    -> same, finished commodities are not repeated
+        other errors         -> one retry after 30 min, then pause collection
+        access denied / format changed -> pause at once
+    a paused collector ignores scheduled jobs until an admin action resumes it
+\end{lstlisting}
+
+\chapter{Reproducibility}
+The numerical results are tied to the database snapshot of 27 October 2026. To run the system and the tests:
+\begin{lstlisting}
+cd agmarknet_collector
+python -m agmarknet serve --output output     # site at http://127.0.0.1:8000, admin at /admin
+python -m unittest discover -s tests            # 80 tests
+\end{lstlisting}
+The constants of the forecasting rules (\texttt{WINDOW\_DAYS}, \texttt{MIN\_ROWS}, \texttt{MIN\_RECENT}, \texttt{MAX\_AGE\_DAYS}, \texttt{WIDTH\_INFLATION}, \texttt{WIDTH\_FLOOR}, \texttt{VERSION}) are at the top of \texttt{agmarknet/forecast.py}. The model version must be changed whenever the logic changes so that cached forecasts are recomputed. Any change to the data or constants requires recomputing all tables in Chapter~6.
+
+% ============================= BIBLIOGRAPHY ============================
+\begin{thebibliography}{99}
+\addcontentsline{toc}{chapter}{Bibliography}
+
+\bibitem{agmarknet}
+Government of India, Ministry of Agriculture and Farmers Welfare,
+\emph{Agmarknet: Agricultural Marketing Information Network (Agmarknet 2.0)}.
+\url{https://agmarknet.gov.in/}.
+
+\bibitem{odisha}
+R. K. Mishra,
+\emph{Reach of AGMARKNET to Farmers in the State of Odisha},
+Report, CCS National Institute of Agricultural Marketing.
+\url{http://ccsniam.gov.in/img/Reach-on-AGMARKNET-Report20.pdf}.
+
+\bibitem{glez2014}
+D. Glez-Pe\~na, A. Louren\c{c}o, H. L\'opez-Fern\'andez, M. Reboiro-Jato and F. Fdez-Riverola,
+\emph{Web scraping technologies in an API world},
+Briefings in Bioinformatics, vol. 15, no. 5, pp. 788--797, 2014.
+
+\bibitem{hamilton1994}
+J. D. Hamilton,
+\emph{Time Series Analysis}, Princeton University Press, 1994.
+
+\bibitem{hyndman2021}
+R. J. Hyndman and G. Athanasopoulos,
+\emph{Forecasting: Principles and Practice}, 3rd ed., OTexts, 2021.
+\url{https://otexts.com/fpp3/}.
+
+\bibitem{makridakis2020}
+S. Makridakis, E. Spiliotis and V. Assimakopoulos,
+\emph{The M4 Competition: 100,000 time series and 61 forecasting methods},
+International Journal of Forecasting, vol. 36, no. 1, pp. 54--74, 2020.
+
+\bibitem{gardner1985}
+E. S. Gardner Jr.,
+\emph{Exponential smoothing: The state of the art},
+Journal of Forecasting, vol. 4, no. 1, pp. 1--28, 1985.
+
+\bibitem{kalman1960}
+R. E. Kalman,
+\emph{A New Approach to Linear Filtering and Prediction Problems},
+Journal of Basic Engineering, vol. 82, no. 1, pp. 35--45, 1960.
+\url{https://doi.org/10.1115/1.3662552}.
+
+\bibitem{welch2006}
+G. Welch and G. Bishop,
+\emph{An Introduction to the Kalman Filter},
+Technical Report TR 95-041, University of North Carolina at Chapel Hill, revised 2006.
+\url{https://www.cs.unc.edu/~welch/media/pdf/kalman_intro.pdf}.
+
+\bibitem{durbin2012}
+J. Durbin and S. J. Koopman,
+\emph{Time Series Analysis by State Space Methods}, 2nd ed., Oxford University Press, 2012.
+
+\bibitem{tashman2000}
+L. J. Tashman,
+\emph{Out-of-sample tests of forecasting accuracy: an analysis and review},
+International Journal of Forecasting, vol. 16, no. 4, pp. 437--450, 2000.
+
+\bibitem{hyndman2006}
+R. J. Hyndman and A. B. Koehler,
+\emph{Another look at measures of forecast accuracy},
+International Journal of Forecasting, vol. 22, no. 4, pp. 679--688, 2006.
+
+\bibitem{gneiting2007}
+T. Gneiting and A. E. Raftery,
+\emph{Strictly proper scoring rules, prediction, and estimation},
+Journal of the American Statistical Association, vol. 102, no. 477, pp. 359--378, 2007.
+
+\bibitem{shafer2008}
+G. Shafer and V. Vovk,
+\emph{A tutorial on conformal prediction},
+Journal of Machine Learning Research, vol. 9, pp. 371--421, 2008.
+
+\bibitem{sqlitewal}
+SQLite Documentation, \emph{Write-Ahead Logging}.
+\url{https://www.sqlite.org/wal.html}.
+
+\bibitem{fastapi}
+S. Ram\'irez, \emph{FastAPI documentation}.
+\url{https://fastapi.tiangolo.com/}.
+
+\end{thebibliography}
+
+\end{document}

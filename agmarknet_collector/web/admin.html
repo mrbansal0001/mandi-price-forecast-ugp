@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Collector admin</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Collector admin</h1>
+    <span class="small"><a href="/">Farmer page</a> · <span id="stamp" class="muted"></span></span>
+  </header>
+  <div id="banner"></div>
+  <section class="card">
+    <h2>Actions</h2>
+    <p class="small"><label for="state">State: </label><select id="state"><option value="">All states</option></select></p>
+    <button class="btn" data-kind="update">Run update now</button>
+    <button class="btn ghost" data-kind="weekly">Census: all commodities, last 30 days</button>
+    <button class="btn ghost" data-kind="forecast">Rebuild forecasts</button>
+    <button class="btn ghost" data-kind="bootstrap">Rebuild one-year history (choose a state)</button>
+    <p class="small muted">Running any action also resumes collection if it was paused after a failure.</p>
+  </section>
+  <section class="card"><h2>Overview</h2><div id="overview" class="facts"></div></section>
+  <section class="card"><h2>States</h2><div id="states" class="scroll"></div></section>
+  <section class="card"><h2>Scheduled checks (IST)</h2><div id="jobs" class="scroll"></div></section>
+  <section class="card"><h2>Data arrivals (rows each update added, by data date)</h2><div id="arrivals" class="scroll"></div></section>
+  <section class="card"><h2>Recent jobs</h2><div id="runs" class="scroll"></div></section>
+  <section class="card"><h2>Access diagnostics</h2><div id="diag" class="scroll"></div></section>
+  <section class="card"><h2>Stale series (first 100)</h2><div id="stale" class="scroll"></div></section>
+  <section class="card"><h2>Model performance (pooled over stored forecasts)</h2><div id="perf" class="scroll"></div></section>
+</div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+function h(tag,attrs,...kids){const el=document.createElement(tag);for(const[k,v]of Object.entries(attrs||{})){if(k==='class')el.className=v;else if(v!=null)el.setAttribute(k,v)}
+  for(const kid of kids.flat())if(kid!=null&&kid!==false)el.append(kid.nodeType?kid:document.createTextNode(String(kid)));return el}
+const when=iso=>iso?new Date(iso).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):'—';
+const num=n=>n==null?'—':Math.round(n).toLocaleString('en-IN');
+const table=(heads,rows)=>rows.length?h('table',{},h('thead',{},h('tr',{},heads.map(t=>h('th',{},t)))),h('tbody',{},rows.map(r=>h('tr',{},r.map(c=>h('td',{},c)))))):h('p',{class:'muted small'},'Nothing to show.');
+const fact=(label,value,sub)=>h('div',{class:'fact'},h('span',{class:'muted small'},label),h('b',{},value),sub&&h('span',{class:'small muted'},sub));
+
+async function load(){
+  try{
+    const r=await fetch('/api/admin/status',{cache:'no-store'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('HTTP '+r.status));
+    const s=await r.json();
+    $('banner').replaceChildren(...(s.collection_paused?[h('div',{class:'banner bad'},'Collection is paused after a failure. See recent jobs and diagnostics below; any action above resumes it.')]:[]));
+    $('stamp').textContent='refreshed '+when(new Date().toISOString());
+    const st=s.performance.statuses||{};
+    const waiting=s.waiting?`Retrying ${when(s.waiting.retry_at)}: ${s.waiting.detail||''}`:null;
+    $('overview').replaceChildren(
+      fact('Last successful update',when(s.last_successful_update),s.running?`Running: ${s.running.kind} — ${s.running.detail||''}`:(waiting||'Idle')),
+      fact('Stored prices (tracked states)',num(s.database.observations),`${s.database.earliest||'—'} to ${s.database.latest||'—'}`),
+      fact('Coverage',`${num(s.markets)} markets · ${num(s.districts)} districts`,`${num(s.commodities)} commodities · ${num(s.series)} series listed`),
+      fact('Forecasts today',`${num(st.updated||0)} ready`,`${num(st.insufficient||0)} insufficient history · ${num(st.delayed||0)} delayed`),
+      fact('Delayed series (latest report >7 days old)',num(s.stale_count),'still listed, forecast withheld'),
+      fact('Quarantined rows',num(s.quarantined)),
+      fact('Commodity groups',Object.entries(s.groups).map(([g,n])=>`${g} ${n}`).join(' · ')||'—'));
+    if($('state').options.length===1)for(const x of s.by_state)$('state').append(h('option',{value:x.name},x.name));
+    $('states').replaceChildren(table(['State','Stored prices','Markets','Districts','Commodities','Series','Forecasts ready','History','Last update','Last weekly census'],
+      s.by_state.map(x=>[x.name,num(x.observations),num(x.markets),num(x.districts),num(x.commodities),num(x.series),num(x.forecasts),
+        x.history_complete?`complete (${x.backfill_range?x.backfill_range.from+' → '+x.backfill_range.to:'—'})`:'building',when(x.last_successful_update),when(x.last_weekly_update)])));
+    $('jobs').replaceChildren(table(['Job','Next run'],s.scheduled_jobs.map(j=>[j.id,when(j.next_run)])));
+    $('arrivals').replaceChildren(table(['Finished','State','Kind','Changed series','New rows','Newest date','Rows added by date'],
+      (s.arrivals||[]).map(a=>[when(a.at),a.state,a.kind,num(a.changed_series),a.new_rows==null?'first snapshot':num(a.new_rows),a.newest||'—',a.added?a.added.map(([d,n])=>d.slice(5)+' +'+n).join(', ')||'nothing new':'—'])));
+    $('runs').replaceChildren(table(['Kind','State','Status','Started','Finished','Progress','Detail'],s.runs.map(x=>[x.kind,x.state||'all',x.status,when(x.started),when(x.finished),x.total?`${x.progress}/${x.total}`:'—',x.detail||''])));
+    $('diag').replaceChildren(table(['Time','Category','HTTP','Code','Detail'],s.diagnostics.map(d=>[when(d.at),d.category,d.http_status,d.code||'—',d.detail])));
+    $('stale').replaceChildren(table(['Market','Crop','Variety · grade','Latest'],s.stale_series.map(x=>[`${x.market}, ${x.district}`,x.commodity,`${x.variety} · ${x.grade}`,x.latest||'—'])));
+    const p=s.performance;
+    $('perf').replaceChildren(table(['Model','MAE (₹)','RMSE (₹)','MAPE','Tests','Series won'],p.models.map(m=>[m.model,num(m.mae),num(m.rmse),m.mape==null?'—':m.mape.toFixed(1)+'%',m.n,m.wins])),
+      h('p',{class:'small muted'},p.interval_coverage.observed==null?'Interval coverage: not enough tests yet.':`95% interval coverage: ${p.interval_coverage.observed.toFixed(0)}% over ${p.interval_coverage.n} tests.`));
+  }catch(e){$('banner').replaceChildren(h('div',{class:'banner bad'},'Could not load admin status: '+e.message))}
+}
+document.querySelectorAll('button[data-kind]').forEach(b=>b.addEventListener('click',async()=>{
+  b.disabled=true;
+  try{const r=await fetch('/api/admin/enqueue?kind='+b.dataset.kind+'&state='+encodeURIComponent($('state').value),{method:'POST'});if(!r.ok)throw new Error((await r.json()).detail)}
+  catch(e){$('banner').replaceChildren(h('div',{class:'banner bad'},String(e.message||e)))}
+  b.disabled=false;load()}));
+load();setInterval(load,10000);
+</script>
+</body>
+</html>

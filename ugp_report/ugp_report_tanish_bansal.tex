@@ -1,0 +1,1332 @@
+\documentclass[12pt,a4paper,oneside]{report}
+
+% Backend contribution report. Figure files used: logo.png,
+% 02_scraping_workflow.png, 03_request_budget.png,
+% 04_arrival_lag.png and 05_example_series.png.
+% The original report is retained in the adjacent before_backend_revision file.
+
+% -------------------------------------------------------------------
+% Editable title-page details
+% -------------------------------------------------------------------
+\newcommand{\studentname}{Tanish Bansal}
+\newcommand{\rollnumber}{231075}
+\newcommand{\supervisor}{Satya Prakash Singh}
+\newcommand{\projectcourse}{Undergraduate Project Report (MTH496)}
+\newcommand{\department}{Department of Mathematics and Statistics}
+\newcommand{\institution}{Indian Institute of Technology, Kanpur}
+\newcommand{\projecttitle}{Automated Web Scraping and Backend Data Infrastructure\\ for Agricultural Mandi Prices\\ in Uttar Pradesh and Rajasthan}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{setspace}
+\usepackage{titlesec}
+\graphicspath{{./}{figures/}}
+
+\hypersetup{hidelinks,bookmarksnumbered=true,pdfauthor={\studentname},pdftitle={Automated Web Scraping and Backend Data Infrastructure for Agricultural Mandi Prices}}
+\setstretch{1.10}\setlength{\headheight}{14pt}
+\setlength{\parskip}{0.35em}
+\setlength{\parindent}{1.5em}
+\setlist[itemize]{leftmargin=2em,itemsep=0.2em,topsep=0.25em}
+\setlist[enumerate]{leftmargin=2em,itemsep=0.25em,topsep=0.25em}
+\captionsetup{font=small,labelfont=bf}
+\numberwithin{equation}{chapter}
+\numberwithin{figure}{chapter}
+\numberwithin{table}{chapter}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Mandi Price Backend Infrastructure}
+\fancyhead[R]{\small Undergraduate Project Report}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{example}{Example}[chapter]
+\newtheorem{remark}{Remark}[chapter]
+
+% Figure that falls back to a placeholder box when the image is not uploaded yet.
+\newcommand{\safefig}[2]{\IfFileExists{#1}{\includegraphics[width=#2\textwidth]{#1}}{%
+  \fbox{\parbox[c][4.5cm][c]{0.8\textwidth}{\centering\small Figure file not found:\\\texttt{\detokenize{#1}}}}}}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{black!30},
+  showstringspaces=false,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color{black!65}
+}
+
+\begin{document}
+
+% =============================== TITLE ===============================
+\begin{titlepage}
+\thispagestyle{empty}
+
+\centering
+\IfFileExists{logo.png}{%
+  \includegraphics[width=3.2cm]{logo.png}\par
+}{%
+  \framebox{\parbox[c][2.8cm][c]{2.8cm}{\centering\small\textbf{IIT Kanpur}\\\textbf{Logo}\\(\texttt{logo.png})}}\par
+}
+\vspace*{1.0cm}
+{\LARGE\bfseries \projecttitle\par}
+\vspace{1.8cm}
+{\Large \studentname\par}
+\vspace{0.25cm}
+{\large Roll Number: \rollnumber\par}
+\vspace{1.0cm}
+{\large Project Supervisor: \supervisor\par}
+\vspace{1.9cm}
+{\large\bfseries \projectcourse\par}
+\vspace{0.7cm}
+{\large \department\par}
+{\large \institution\par}
+
+\vfill
+{\large \today\par}
+\vspace*{0.8cm}
+\end{titlepage}
+
+% ============================ FRONT MATTER ============================
+\pagenumbering{roman}
+\setcounter{page}{1}
+\tableofcontents
+\clearpage
+\listoffigures
+\clearpage
+\listoftables
+\clearpage
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+This report presents the automated data-collection and backend work that I handled in the agricultural mandi-price project assigned by my supervisor, \supervisor. My work covers investigating the Agmarknet report interface, collecting price records, recognising its six-character CAPTCHA images, validating observations, maintaining a SQLite database, scheduling updates and recovering interrupted collection. The aim is to provide correct, traceable and regularly refreshed market data without requiring repeated manual report downloads.
+
+The collection design uses one state--commodity report over a long date interval instead of a separate report for every market and month. The source client uses a local glyph-template matching algorithm for CAPTCHA recognition, filter-scoped access-ticket reuse, paced HTTP requests and bounded retries. The report develops each recognition stage explicitly: template generation, grayscale conversion, contrast-based thresholding, column-projection segmentation, nearest-neighbour resizing and minimum-score character selection. Pagination checks and recursive date splitting prevent incomplete reports from being accepted.
+
+The storage pipeline normalises dates and text, converts compatible price units, quarantines rejected rows, prevents duplicates and preserves corrected values. A persistent queue supports daily collection at 07:00 Indian Standard Time and a wider Sunday census at 03:00. A single worker, database checkpoints, adaptive request spacing and deferred retries support recovery from throttling and outages. The report also explains backend data delivery, cache invalidation, freshness monitoring and the operating conditions required for daily execution. Historical collection records and successful jobs on 6 November 2026 provide operational evidence. The current installation runs on one personal computer; supervised always-on hosting and automated backups remain future work.
+
+\clearpage
+\chapter*{Declaration}
+\addcontentsline{toc}{chapter}{Declaration}
+I hereby declare that this report documents the work I handled in the agricultural mandi-price project assigned by my supervisor, \supervisor. The work presented concerns source investigation, automated scraping, CAPTCHA recognition, data validation, database management, scheduling, recovery and backend maintenance.
+
+Published ideas and methods are acknowledged through citations and the bibliography. The algorithms are described according to the implemented source code, and collection measurements are associated with the dated evidence stated in this report.
+
+\vspace{1.2cm}
+\noindent Name: \studentname \hfill Roll Number: \rollnumber
+\vspace{1.0cm}
+
+\noindent Signature: \rule{7cm}{0.4pt}
+\vspace{0.8cm}
+
+\noindent Date: \rule{4cm}{0.4pt}
+
+\clearpage
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+I thank my project supervisor, \supervisor, for assigning this project and guiding the work. I am grateful to the \department, \institution, for the opportunity to investigate a practical problem involving public data, automated collection and reliable backend operation.
+
+\clearpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\chapter{Problem, Objectives and Scope of My Work}
+
+\section{The problem}
+A farmer deciding where and when to sell a crop needs reliable prices for nearby mandis. Agmarknet publishes minimum, maximum and modal prices, but obtaining a report requires filter selections, a date interval and a CAPTCHA \cite{agmarknet}. Repeating this process manually across commodities and markets is slow. An application using these observations also needs consistent units, preserved market identities and a clear record of when the data were checked.
+
+The backend problem is to acquire the reports efficiently, verify their contents, store them without duplication and refresh recent dates automatically. Collection must continue safely after temporary failures while keeping previously saved history available. A page visit should read the stored dataset rather than wait for a new source download.
+
+\section{Work handled by me}
+As part of the project assigned by my supervisor, \supervisor, I handled the scraping pipeline and backend data infrastructure. Table~\ref{tab:workscope} summarises the work documented here. The report describes these tasks and their algorithms in detail.
+
+\begin{table}[H]
+\centering
+\caption{Scope of the work presented in this report}
+\label{tab:workscope}
+\small
+\begin{tabular}{@{}p{0.28\textwidth}p{0.63\textwidth}@{}}
+\toprule
+Area & Work handled \\
+\midrule
+Source investigation & Identify request filters, response fields, pagination, empty-report behaviour, ticket scope and throttling. \\
+Automated collection & Recognise CAPTCHA images locally, manage report access, retrieve pages, split oversized windows and resume incomplete work. \\
+Data quality and storage & Normalise records, convert units, quarantine invalid data, preserve provenance, prevent duplicates and record corrections. \\
+Scheduled operation & Select active commodities, discover additional commodities, persist jobs, apply retry policies and recover after restarts. \\
+Backend maintenance & Serve saved observations, manage list caches, expose freshness and diagnostics, and inspect daily execution. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Objectives}
+\begin{enumerate}
+  \item establish the source's actual report and access behaviour before large collection;
+  \item implement the image-processing and matching steps needed for the supported CAPTCHA format;
+  \item minimise unnecessary report requests while retaining market, commodity, variety and grade distinctions;
+  \item accept only validated observations and retain an audit trail for rejected or corrected records;
+  \item make repeated collection idempotent and interrupted work resumable;
+  \item maintain daily updates and wider discovery checks through a persistent job queue;
+  \item provide responsive stored-data reads and meaningful freshness information;
+  \item evaluate collection effort, data quality and operational reliability.
+\end{enumerate}
+
+\section{Scope and terminology}
+The maintained application covers Uttar Pradesh and Rajasthan. A small earlier Maharashtra pilot remains in storage but is outside the active two-state service. The command-line collection tools and the application-specific job service share storage facilities, but use different planning and execution policies. The live application does not drain the older nationwide planning queue.
+
+A \emph{window} is a report for a state, commodity and date interval. A \emph{series} is a fixed state--district--market--commodity--variety--grade combination. A \emph{job} is persisted application work, such as one state's daily update. One job contains many windows, and a window can update many series. The documented daily service is the Python application in \path{agmarknet_collector}.
+
+\section{Report organisation}
+Chapter~2 explains source access and every stage of the scraping algorithms, including CAPTCHA recognition. Chapter~3 covers validation, identity, transactions, provenance and export. Chapter~4 details commodity selection, scheduling, queueing, retries and recovery. Chapter~5 describes backend data services and maintenance. Chapter~6 examines coverage and reporting lag. Chapter~7 presents collection evidence and verification. Chapter~8 gives limitations and future work, and Chapter~9 concludes. The appendices contain schema, API, algorithm and reproduction details.
+
+\begin{figure}[H]
+\centering
+\fbox{\begin{minipage}{0.89\textwidth}
+\centering
+Agmarknet catalogue and report interface\\[0.4em]
+$\downarrow$\\[0.3em]
+Paced requests, CAPTCHA recognition and access tickets\\[0.3em]
+$\downarrow$\\[0.3em]
+Pagination checks, validation and transactional storage\\[0.3em]
+$\downarrow$\\[0.3em]
+SQLite observations, provenance and persistent checkpoints\\[0.3em]
+$\downarrow$\\[0.3em]
+Scheduled updates, backend reads and freshness monitoring
+\end{minipage}}
+\caption{Data collection and backend pipeline documented in this report.}
+\label{fig:pipeline}
+\end{figure}
+
+\chapter{Source Access and Automated Web Scraping}
+
+This chapter describes the source investigation and collection design. API behaviour and throughput figures are observations from the project probes, not guarantees about the portal. The collection measurements retained from the original experiment refer to the 27 October 2026 snapshot unless a later date is stated.
+
+\section{The report interface}
+The portal's ``Daily Price and Arrival Report'' page is a single-page application that calls a JSON API. Calling the structured endpoints avoids extracting table contents from rendered HTML, an approach consistent with API-based web scraping \cite{glez2014}. A report is requested with a set of filters: price/arrival type, commodity group and commodity, variety, grade, state, district, market, and a date range. The collector uses two kinds of calls:
+\begin{enumerate}
+  \item a \emph{catalogue} call returning the options for every filter (states, districts, markets, commodities, groups, varieties, grades) and the allowed date range;
+  \item the \emph{report} call, which returns a page of rows together with pagination information (total count, total pages, current page).
+\end{enumerate}
+Each row of a report holds the arrival date, state, district, market, commodity, variety, grade, minimum, maximum and modal price, the price unit, and (for combined reports) the arrival quantity.
+
+\section{Catalogue lookup and report-parameter construction}
+The client fetches filter metadata from \path{/daily-price-arrival/filters}. The catalogue maps readable state and commodity names to source identifiers and records commodity-group membership. It is cached as \path{catalogue.json}. The command-line catalogue function also records retrieval metadata and supports an explicit refresh; the live service fetches the catalogue if the file is absent and otherwise reuses it.
+
+For a collection window, parameter construction looks up the commodity's group and sends the exact source encodings for price data, one state and one commodity, an inclusive date range and the requested page size. All-district, all-market, all-variety and all-grade sentinel values keep the report broad without averaging its returned records. The current implementation uses the source's \texttt{data\_type=100004}, district sentinel \texttt{100001}, market sentinel \texttt{100002}, grade sentinel \texttt{100003} and variety sentinel \texttt{100007}. These are observed API encodings, not generic identifiers that should be guessed for another source.
+
+\begin{lstlisting}[caption={Catalogue-based parameter construction, simplified}]
+load catalogue from disk; fetch it first if absent
+find commodity entry matching the requested commodity_id
+params = {
+    from_date: start, to_date: end, data_type: "100004",
+    group: commodity.group_id, commodity: commodity_id,
+    state: JSON([state_id]), district: "[100001]",
+    market: JSON([requested_market or 100002]),
+    grade: "[100003]", variety: "[100007]",
+    page: page_number, limit: page_limit
+}
+\end{lstlisting}
+
+\section{CAPTCHA recognition by glyph-template matching}
+\label{sec:ocr}
+The implemented recognition algorithm is \emph{segmentation followed by minimum-score glyph-template matching}. It uses Pillow for image decoding, rendering and resizing, and NumPy for pixel operations. It is a deterministic method for the observed plain six-character format. It uses a fixed font-template bank rather than a trained neural network or a general-purpose OCR engine. Uppercase, lowercase and digits are separate classes.
+
+\subsection{Template-bank generation}
+The recogniser loads the bundled DejaVu Sans font; if that file is absent, it attempts to locate the font in Matplotlib's installed resources. The alphabet consists of 26 lowercase letters, 26 uppercase letters and 10 digits. Each character is rendered at font sizes 38, 39, 40, 41 and 42 on a $90\times90$ white grayscale canvas. Rendered pixels below 128 become foreground. The foreground's bounding rectangle is then extracted and stored with the character label.
+
+The bank therefore contains $62\times5=310$ templates. Several sizes preserve useful shape and dimension information while allowing for small source-rendering variations. Templates are generated when the recogniser object is constructed and reused within that client; they are not fitted to prices or learned from downloaded answers.
+
+\begin{lstlisting}[caption={Algorithm: generate the CAPTCHA template bank}]
+templates = []
+for font_size in [38, 39, 40, 41, 42]:
+    font = load_DejaVuSans(font_size)
+    for character in lowercase + uppercase + digits:
+        canvas = grayscale_image(90, 90, white)
+        draw character at (10, 5) using font and black ink
+        mask = pixel_value(canvas) < 128
+        template = crop_to_foreground_bounding_box(mask)
+        templates.append((character, template))
+\end{lstlisting}
+
+\subsection{Image decoding and contrast-based thresholding}
+The client decodes the source's Base64 image with validation enabled, and the recogniser converts it to grayscale. An image wider than 2,000 pixels or taller than 1,000 pixels is rejected. Let $I(x,y)$ be an 8-bit grayscale intensity, and let $L$ and $U$ be the 2nd and 90th percentiles of all image intensities. If $U-L<20$, the contrast is insufficient and recognition stops.
+
+Otherwise the algorithm chooses the global threshold
+\[
+\theta=\frac{L+U}{2},\qquad
+B(x,y)=\begin{cases}1,&I(x,y)<\theta,\\0,&I(x,y)\ge\theta.\end{cases}
+\]
+Here one denotes dark foreground. The percentile-derived threshold adapts to the observed image's background and text intensity. It is a global threshold, not a local adaptive threshold or histogram-optimisation method.
+
+\subsection{Column projection and run segmentation}
+For each image column $x$, compute whether any foreground pixel occurs:
+\[
+o(x)=\max_y B(x,y).
+\]
+A left-to-right scan groups consecutive columns with $o(x)=1$ into occupied runs. A final empty sentinel closes a run that reaches the image boundary. Exactly six runs are required. Each run becomes one candidate character, cropped vertically to the rows containing foreground pixels.
+
+This is projection-profile segmentation with run detection, not a two-dimensional connected-component algorithm. It relies on blank columns separating the six characters. Touching characters, extra isolated marks or a changed layout can violate that assumption and are rejected rather than forced into six guessed labels.
+
+\begin{lstlisting}[caption={Algorithm: preprocess and segment the six glyphs}]
+image = decode_image(bytes).convert_to_grayscale()
+reject if width > 2000 or height > 1000
+L, U = percentile(image, [2, 90])
+reject if U - L < 20
+mask = image < (L + U) / 2
+occupied = any_foreground_in_each_column(mask)
+runs = consecutive_true_intervals(occupied + [False])
+reject unless len(runs) == 6
+glyphs = [vertical_foreground_crop(mask[:, a:b]) for a, b in runs]
+\end{lstlisting}
+
+\subsection{Resizing and the matching score}
+For a segmented glyph $G$ of height $h_G$ and width $w_G$, each template $T$ is resized to $G$'s dimensions using nearest-neighbour interpolation. This preserves the binary nature of the mask. The mismatch fraction is the mean of unequal pixels:
+\[
+d(G,T)=\frac{1}{h_Gw_G}\sum_{y=1}^{h_G}\sum_{x=1}^{w_G}
+\mathbf{1}\{G(x,y)\ne\widetilde T(x,y)\}.
+\]
+The implemented score also penalises the difference between the template's \emph{original} dimensions and the observed glyph's dimensions:
+\[
+s(G,T)=d(G,T)+0.015\bigl(|h_T-h_G|+|w_T-w_G|\bigr).
+\]
+The candidate list is sorted by score, and the label of the minimum-score template is selected. If the best score exceeds 0.22, the entire image is rejected. Otherwise its label is appended to the answer. This is repeated for the six glyphs in left-to-right order, preserving case.
+
+The function also returns \texttt{round(1-score,3)} for each character. This value is a matching-quality indicator, not a calibrated probability of correctness. The report client uses the recognised string; it does not interpret these values as statistical confidence levels.
+
+\begin{lstlisting}[caption={Algorithm: score templates and recognise the CAPTCHA}]
+answer = ""; match_quality = []
+for glyph in six_segmented_glyphs:
+    candidates = []
+    for character, template in templates:
+        fitted = resize_nearest(template, glyph.width, glyph.height)
+        mismatch = mean(fitted != glyph)
+        penalty = 0.015 * (abs(template.height - glyph.height)
+                           + abs(template.width - glyph.width))
+        candidates.append((mismatch + penalty, character))
+    candidates.sort()
+    score, character = candidates[0]
+    reject image if score > 0.22
+    answer += character
+    match_quality.append(round(1 - score, 3))
+return answer, match_quality
+\end{lstlisting}
+
+\subsection{Cost and limitations of recognition}
+Image preprocessing scans $HW$ pixels. With $M=310$ templates and a glyph area bounded by $A$, matching and sorting six candidate lists cost approximately $O(HW+6(MA+M\log M))$. The alphabet and number of characters are fixed, making the method inexpensive for the observed small images. A matching score below the threshold does not guarantee source acceptance, so the HTTP workflow handles rejected answers separately. Changes in font, overlapping letters, distortion or image construction can make this recogniser fail; it is not a universal CAPTCHA solver.
+
+\section{Bounded challenges and filter-scoped access tickets}
+\label{sec:tickets}
+Before a new report is served, the client obtains an image and key, recognises the image locally and submits the answer with the report parameters. A successful response can include a short-lived report ticket, remaining-call allowance and expiry time. Subsequent pages can use that ticket while it is valid. Ticket availability is rechecked rather than assuming a single ticket lasts indefinitely.
+
+To associate a ticket with the exact report, the client removes \texttt{page}, \texttt{captcha}, \texttt{captcha\_key} and \texttt{report\_ticket} from the parameters, serialises the remaining dictionary with sorted keys and computes its SHA-256 digest. This is a deterministic scope fingerprint, not an authentication signature. A page change leaves the scope unchanged; changing any retained parameter, including the interval or page limit, changes it.
+
+A ticket is reused only when its scope matches, its remaining allowance is positive and its expiry is more than five seconds away. A scope change or explicit fresh request resets in-memory access state. A ticket rejection triggers a fresh challenge. The remembered ticket, allowance and expiry are refreshed from each accepted response.
+
+\begin{lstlisting}[caption={Algorithm: bounded report access and ticket reuse}]
+scope = SHA256(JSON_sorted(params excluding page and access fields))
+if explicit_fresh_request or scope != remembered_scope:
+    clear remembered ticket, allowance and expiry
+if ticket exists and remaining_calls > 0 and expiry > now + 5 seconds:
+    body, access_error = submit_report(params + ticket)
+    if not access_error:
+        remember response access metadata; return body
+    clear remembered access
+
+for attempt in range(3):
+    challenge = request_CAPTCHA_image_and_key()
+    if challenge access is denied: raise AccessDenied
+    try: answer = template_recognise(validated_Base64_decode(image))
+    except OCRFailure: continue
+    body, access_error = submit_report(params + answer + challenge_key)
+    if access_error: continue
+    remember response access metadata; return body
+raise CaptchaExhausted
+\end{lstlisting}
+
+At most three fresh challenges are attempted within one report-access call. Recognition failure or an invalid answer consumes an attempt. Exhaustion is handed to the sweep and job policies rather than producing an unbounded image loop. Challenge-key or response-structure errors are classified separately. The text ``too many requests'' is recognised as throttling before challenge-error handling, avoiding repeated challenge attempts during a source cooldown (Section~\ref{sec:throttle}).
+
+\begin{figure}[H]
+\centering
+\safefig{02_scraping_workflow.png}{0.98}
+\caption{Report-access workflow: image recognition, scoped ticket use, pagination and classified failures.}
+\label{fig:scrapeflow}
+\end{figure}
+
+\section{Paced HTTP requests and response classification}
+The client uses a reusable HTTP session. Before each attempt it computes the remaining spacing from the previous attempt's \emph{start} time using a monotonic clock:
+\[
+\text{sleep}=\max\{0,\ I-(t_{\mathrm{now}}-t_{\mathrm{last}})\},
+\]
+where $I$ is the request interval. A slow response therefore consumes some or all of the spacing itself. The client has a three-second minimum interval; the application supplies its persisted interval, bounded between four and thirty seconds. Connection and read timeouts are 15 and 90 seconds respectively.
+
+Network exceptions and HTTP 429 or 5xx responses receive at most five request attempts. Before an available retry, the ordinary exponential wait is $\min(60,2^{r+1})$ seconds for zero-based failed-attempt index $r$, yielding 2, 4, 8 and 16 seconds. A numeric or HTTP-date \texttt{Retry-After} can extend it. If the computed wait exceeds 60 seconds, the client raises a deferred rate-limit condition with a whole-minute wait instead of sleeping for an arbitrarily long time inside the request loop. Exhausted network/server retries become a source-unavailable condition.
+
+The response classifier checks JSON structure, the lowercased detail/message, HTTP status and known access-error prefixes. It distinguishes an explicit empty report from a missing route, a throttle message from a bad answer, access denial from normal challenge rejection, and malformed data from an accepted report. Diagnostic messages redact submitted access values before storage.
+
+\begin{lstlisting}[caption={Algorithm: paced HTTP attempts and error classification}]
+for r in range(5):
+    sleep(max(0, interval - (monotonic_now() - last_start)))
+    last_start = monotonic_now()
+    make HTTP request with connect/read timeouts (15, 90)
+    on network exception:
+        if final attempt: raise Unavailable
+        sleep(min(60, 2**(r+1))); continue
+    on HTTP 429 or 5xx:
+        if final attempt: raise Unavailable
+        wait = max(exponential_wait, parsed_Retry_After_if_valid)
+        if wait > 60: raise RateLimited_with_deferred_minutes
+        sleep(wait); continue
+    require a JSON dictionary
+    if detail contains "too many requests": raise RateLimited
+    if verified report-route 404 with "No data available": return explicit_empty
+    classify challenge/ticket error from message and error code
+    if HTTP 401/403 without challenge error: raise AccessDenied
+    if other HTTP error without challenge error: raise CollectorError
+    return body and challenge_error_flag
+\end{lstlisting}
+
+\section{Structured report decoding and explicit empty results}
+\texttt{unpack} requires the source's success flag and the documented records container. It accepts exactly one record group and verifies that the row payload is a list. Pagination may be a dictionary or the supported one-element list. Total count, total pages, current page and items per page must be non-negative integers; booleans are rejected despite Python treating them as integer subclasses.
+
+An empty result is accepted only through the verified report-route ``No data available'' contract or explicit zero-count metadata with a consistent empty row list. A missing records structure does not imply that a market had no prices. These checks establish a valid page representation; the window algorithm subsequently verifies consistency between pages and the final number downloaded.
+
+\section{Measured behaviour of the report API}
+Controlled probes (a handful of requests each) established the facts in Table~\ref{tab:apifacts}, which were then used as design constraints.
+
+\begin{table}[H]
+\centering
+\caption{Measured behaviour of the report API and the design consequence}
+\label{tab:apifacts}
+\small
+\begin{tabular}{@{}p{0.46\textwidth}p{0.46\textwidth}@{}}
+\toprule
+Finding & Consequence \\
+\midrule
+A report for \emph{all districts} of a state and one commodity can be requested in one call. & One report per (state, commodity), not per market. \\
+The \texttt{commodity} parameter accepts exactly one commodity id. & Commodities cannot be batched in one report. \\
+A date span of up to 365 days is served in one report; any year since 2021 can be requested. & A year of history is one report per commodity. \\
+Pages of up to 5,000 rows are accepted. & Uttar Pradesh wheat ($\approx 85{,}000$ rows per year) needs 17--18 pages and one CAPTCHA. \\
+A commodity with no records returns HTTP 404 with the text ``No data available''. & An empty report is a valid result, not an error. \\
+An ``all states'' option exists in the state filter. & An all-states design is possible (Chapter~8). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Throttling and its classification}\label{sec:throttle}
+During an early probe about one third of requests seemed to fail the CAPTCHA. The cause turned out to be a different condition: after a burst of roughly 100 requests the portal answers with HTTP status 400, error code \texttt{TOKEN\_OR\_CAPTCHA\_REQUIRED} and the message ``too many requests'', and then sustains only about 1--2.5 requests per minute. The code is the same as for a wrong CAPTCHA, so the two must be told apart by the message text. Treating throttling as a CAPTCHA failure wastes CAPTCHA attempts and makes the situation worse. The client therefore distinguishes four conditions and handles them differently (Table~\ref{tab:errors}).
+
+\begin{table}[H]
+\centering
+\caption{Error classes and the collector's response}
+\label{tab:errors}
+\small
+\begin{tabular}{@{}p{0.2\textwidth}p{0.36\textwidth}p{0.36\textwidth}@{}}
+\toprule
+Condition & Detection & Response \\
+\midrule
+Wrong CAPTCHA & invalid-captcha message & Fetch a fresh image; give up on that report after three. The report is \emph{deferred}. \\
+Throttling & ``too many requests'' message & Stop the sweep; wait 15 minutes, then 30; slow the request pace. \\
+Outage & Network error or HTTP 5xx after five attempts & Wait and retry later; do not change the pace. \\
+Format change or denial & Non-JSON or unexpected shape; access denied & Pause collection and show it on the admin page. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{The request budget: why design matters}
+The cost of a plan is the number of CAPTCHA-solved reports (plus extra pages). The legacy plan (one report for each state--commodity--month) is
+\[
+  36\ \text{states}\times 605\ \text{commodities}\times 13\ \text{months}=283{,}140\ \text{reports}.
+\]
+At roughly one to two requests per minute after the burst, with normally more than one HTTP exchange per report, this is months of continuous running. The plan used here collects, for a chosen state, \emph{one report per commodity for the whole year}. Uttar Pradesh needed 408 commodity windows (commodities in groups likely to report prices) and Rajasthan 150 (Table~\ref{tab:budget}). Of the roughly 1,100 report windows completed for the two states, 478 (43\%) were empty, which is why a state added later starts from the commodities already seen elsewhere (Section~\ref{sec:jobs}). Figure~\ref{fig:budget} compares the plans. Its all-states value is a historical planning estimate, not a measured run or the count of distinct commodity identifiers; a nationwide design must account separately for page requests and any date splitting.
+
+\begin{table}[H]
+\centering
+\caption{Report windows needed by different plans}
+\label{tab:budget}
+\small
+\begin{tabular}{@{}p{0.5\textwidth}rp{0.3\textwidth}@{}}
+\toprule
+Plan & Reports & Note \\
+\midrule
+All states $\times$ commodities $\times$ months & 283,140 & Not feasible \\
+Uttar Pradesh, one report per commodity per year & 408 & Used; about 12 hours \\
+Rajasthan, seeded commodity list & 150 & Used; about 2.5 hours \\
+All states, one report per commodity (estimate) & 1,500--2,000 & Proposed (Chapter~8) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\safefig{03_request_budget.png}{0.85}
+\caption{Report windows required by each collection plan (logarithmic scale).}
+\label{fig:budget}
+\end{figure}
+
+\section{Collector design}
+\subsection{One window}
+A window is downloaded page by page. The application requests up to 5,000 rows per page and checks the page number, total row count and total page count throughout the download. A repeated non-empty page, an unexpected empty page or inconsistent totals cause the window to fail rather than accepting a truncated report. A report above 250,000 rows is divided into two date intervals recursively; a single-day report above that limit requires attention.
+
+An exact window key contains the commodity and interval within its job. If that key is already complete, it is skipped. After a full, consistent download, validation and observation storage are transactional. The application records the window checkpoint after that storage transaction, so a crash in between can cause a safe re-fetch; the idempotent observation keys prevent duplication. This is an at-least-once execution design, not a claim of exactly-once network access.
+
+\begin{lstlisting}[caption={Fetching and checkpointing a report window}]
+function fetch_window(state, commodity, start, end, job):
+    if exact_window_complete(job, commodity, start, end): return
+    create pending batch and window records
+    rows = []; page = 1
+    loop:
+        body = client.report(filters, page, limit=5000)
+        verify page number and stable pagination totals
+        if first page reports more than 250000 rows:
+            split date interval; fetch both halves; checkpoint parent
+            return
+        reject repeated pages or premature empty pages
+        rows += body.rows
+        if page >= body.total_pages: break
+        page += 1
+    verify len(rows) == reported_total
+    transaction: validate rows; upsert good rows; quarantine bad rows;
+                 record revisions and batch outcome
+    mark this exact application window complete
+    invalidate backend list caches
+\end{lstlisting}
+
+\subsection{Recursive date bisection and pagination fingerprints}
+For a large interval $[a,b]$, the application chooses
+\[
+m=a+\left\lfloor\frac{b-a}{2}\right\rfloor
+\]
+in calendar days, and recursively requests $[a,m]$ and $[m+1,b]$. These inclusive child intervals neither overlap nor leave a missing date. The parent is marked split/complete after its children have succeeded. If a single day still exceeds the 250,000-row threshold, the application raises a source-format/size condition rather than continuing an ineffective split.
+
+For each non-empty page, the rows are serialised with sorted dictionary keys and hashed with SHA-256. A set of fingerprints detects an identical repeated page inside the same window. This is a page-repetition check, distinct from natural-key deduplication of observations. The collector additionally requires stable total count and total pages, the requested page number, no premature empty page and an exact final row count. A 10,000-page bound catches implausible pagination. In the live service, pagination inconsistencies cause a source-change failure; only the oversized-row condition triggers this date bisection.
+
+\subsection{A sweep with deferral}
+A \emph{sweep} fetches one window per commodity. A CAPTCHA failure defers only that commodity; throttling stops the sweep and defers everything that remains; an outage does the same without changing the pace.
+
+\begin{lstlisting}[caption={Sweep over commodities with deferral and pace adaptation}]
+function sweep(state, commodities, start, end, job):
+    deferred = []; throttled = False; outage = False
+    for each commodity c in the selected list:
+        try: fetch_window(state, c, start, end, job)
+        except CaptchaFailed:  deferred.append(c)
+        except Throttled:      deferred = commodities[c:]; throttled = True; break
+        except Unavailable:    deferred = commodities[c:]; outage = True; break
+    if not outage:
+        pace = pace * 1.5 if throttled else pace * 0.9      # clamp to [4, 30] seconds
+    return deferred
+
+# throttling/outage: usually 15 then 30 minutes
+# CAPTCHA-only deferral: normally 10 then 20 minutes
+# completed identical windows are skipped on retry
+\end{lstlisting}
+
+\subsection{Pace learning}
+The request interval starts at 7.5 seconds, is multiplied by 1.5 after a throttled sweep and by 0.9 after a clean one, and is kept between 4 and 30 seconds. It is stored in the database, so a restart continues with the learned pace. This is a simple multiplicative-increase / multiplicative-decrease rule; the portal's real limit is not published.
+
+\subsection{Single worker and resumability}
+A single worker thread runs one job at a time, and an operating-system file lock prevents two collector processes from running together. Jobs (kind, state, status, attempts, retry time) and completed windows are stored in the database. After a crash or restart, a job left ``running'' is re-queued, and its already completed windows are not fetched again. Eligible non-history jobs are selected before queued history builds. An already running history build is not interrupted; the queue policy is non-preemptive. Chapter~4 gives the exact selection and recovery rules.
+
+\section{Feasibility gate and standalone collection algorithms}
+The repository also contains command-line investigation and collection tools in \path{runner.py}. These were used during source investigation and are distinct from the live application's state-wide history/update queue. Their rules are documented separately so that a command-line safeguard is not mistaken for a startup check performed by the running application.
+
+\subsection{Ten-trial feasibility gate}
+The standalone feasibility routine requests ten fresh-access reports for separate September 2026 pilot dates, using a five-row page limit. A trial succeeds only if a non-empty first page is returned, the page size is respected and every received row passes normalisation. Each trial records duration, row count and changes in client counters, and archives a redacted response. Access denial or exhausted challenges halt the experiment.
+
+The gate passes only if all ten trials were attempted and at least nine succeeded. A SHA-256 digest of the concatenated \path{ocr.py} and \path{client.py} bytes identifies the tested implementation. Bulk command-line collection requires both a passing result and an unchanged digest. This is a reproducible version gate, not an estimated universal OCR accuracy rate; the live \texttt{serve} path does not invoke this gate automatically.
+
+\begin{lstlisting}[caption={Algorithm: standalone feasibility and version gate}]
+version = SHA256(bytes(ocr.py) + bytes(client.py))
+for each of ten fixed pilot dates:
+    request first page with limit 5 and fresh access
+    require non-empty rows, correct page and valid normalisation
+    record success/failure, timing and request counters
+    save redacted response and updated feasibility result
+    stop early on access denial or exhausted challenges
+passed = attempted == 10 and successes >= 9
+before standalone bulk collection:
+    require passed and stored_version == current_version
+\end{lstlisting}
+
+\subsection{Calendar-window planning}
+The older standalone planner forms a state--commodity--calendar-month queue. Starting at the requested first date, it finds the first day of the next month and emits an interval ending at the earlier of the requested end or the preceding day. It then advances to the next date. This handles partial boundary months, year changes and leap years without assuming all months have the same length. Deterministic batch identifiers and \texttt{INSERT OR IGNORE} prevent a repeated plan from duplicating queued windows.
+
+This monthly plan explains the large naive request budget. The maintained application's whole-year-per-commodity history strategy avoids using it for routine two-state history construction. The standalone selector accepts catalogue names or identifiers, excludes the catalogue's synthetic ``all'' entries when expanding a list, and rejects unknown selections.
+
+\subsection{Standalone splitting and resume policy}
+The standalone batch collector requests 100-row pages and normally splits reports above 5,000 rows. It also splits when pagination changes, pages repeat or the final count indicates truncation. A multi-day interval is bisected first. If an all-market single day still needs splitting, it creates one child per concrete market. Failure at a single market on a single day becomes a source-change error. The live application instead uses 5,000-row pages and the 250,000-row date-splitting limit described earlier.
+
+Standalone child batches are selected before unrelated parent-level pending work. Runs recover interrupted batch states to pending, can explicitly retry failed/blocked batches and stop on a fatal batch error. A keyboard interruption resets the active batch to pending so its pages can be re-downloaded. Exports occur after roughly five minutes of elapsed processing and on exit. None of these standalone execution rules replaces the persisted \texttt{app\_runs} daily scheduling policy of Chapter~4.
+
+\section{Responsible use}\label{sec:responsible}
+The portal serves public government data. The collector keeps to one request at a time, learns a conservative pace, backs off when told to, does not use third-party CAPTCHA-solving services, and archives raw pages only for the history build to avoid repeated downloads. Before any wider deployment the portal's terms of use should be checked and the request rate kept within what the operators tolerate.
+
+% ============================== CHAPTER 4 ==============================
+\chapter{Data Validation and Database Management}
+
+\section{Why the website needs persistent storage}
+Downloading a source report for every visitor would repeat expensive requests, consume the source's allowance and make response times depend on CAPTCHA recognition and network availability. The backend therefore separates collection from reading. Collection writes verified observations to \path{output/agmarknet.sqlite}; the running application reads those observations even while a later update is queued or waiting for retry. A source outage can stop new ingestion without deleting the saved history.
+
+SQLite is sufficient for the current single-machine application because both collection and data-serving run near the same database file. Write-ahead logging (WAL) lets readers generally continue while a writer commits changes \cite{sqlitewal}. It does not create multiple simultaneous writers: collection remains serial and short transactions limit contention. Each store connection has a 30-second database timeout and is closed after use.
+
+\section{Row normalisation and validation}
+The source contains date strings, numbers with commas, inconsistent whitespace and price-unit labels. Storage converts accepted records into a consistent representation before making them available through backend reads:
+\begin{enumerate}
+  \item Parse supported date formats into ISO dates and require the date to lie within the requested interval.
+  \item Collapse repeated whitespace in dimension fields. Require state, district, market and commodity; replace a missing variety or grade with ``Not reported''.
+  \item Verify that state and commodity match the requested catalogue entries, and verify market membership when a market filter was requested.
+  \item Parse numeric prices after removing commas. The modal price is required; minimum and maximum can be absent. Reject negative and non-finite values while retaining a genuine reported zero.
+  \item Convert recognised compatible units to INR per quintal. A price per kilogram is multiplied by 100; a price per tonne is multiplied by 0.1. A bundle price is not converted without a defensible weight.
+  \item Where minimum and maximum exist, require minimum $\le$ modal $\le$ maximum.
+\end{enumerate}
+
+The source spells its modal-price field \texttt{model\_price}; the normaliser maps this exact source key to \texttt{modal\_price}. Treating a guessed spelling as equivalent would silently lose valid data. Likewise, HTTP 404 is accepted as an empty report only for the verified ``No data available'' response, not for a missing route or malformed body.
+
+\section{Quarantine instead of silent deletion}
+A rejected row is retained with its raw contents, batch identifier, reason and creation time in \texttt{quarantine}. Valid rows from the same report may still be stored, but the batch becomes \texttt{complete\_with\_quarantine}. This distinguishes accounting for all downloaded rows from accepting all of them as usable prices. Duplicate natural keys inside one report are also recorded for review rather than silently allowing the later quotation to overwrite the earlier one.
+
+In the historical two-state snapshot, 3,414 rows were quarantined: 3,387 had the unsupported ``Rs./Bundle'' unit and 27 violated price ordering. These are collection-quality results, not a claim that a later database will contain the same counts. Large movements in otherwise valid prices are retained; review flags in the export distinguish an unusual observation from a demonstrably invalid one.
+
+\section{Observation keys and series identities}
+An observation's natural key is the ordered tuple
+\[
+(\text{date},\text{state},\text{district},\text{market},
+ \text{commodity},\text{variety},\text{grade}).
+\]
+After whitespace normalisation, text values are case-folded for key construction. The key is stored as a JSON-encoded tuple and enforced as the primary key of \texttt{observations}. Re-fetching an overlapping date interval therefore updates the same observation instead of inserting a second copy.
+
+A series uses the same dimensions without the date. Its identifier is a SHA-256 hash of the JSON-encoded, case-folded six-field tuple; the readable dimensions are stored separately in \texttt{series\_state}. Varieties and grades remain separate, so the backend does not average unlike quotations into a new target. The stored values remain the source quotations for each fixed series; the ingestion algorithm does not combine prices across varieties or commodities.
+
+\section{Idempotent updates and correction history}
+For an existing observation, the storage layer compares minimum, maximum, modal price and normalised unit with the saved record. An unchanged re-fetch refreshes the record's payload and provenance without increasing the series revision. A changed price or unit writes the previous and new payloads into \texttt{revisions}. A newly inserted or changed observation advances its series revision once per affected series in that window.
+
+The revision counter identifies changes to a series and supports invalidation of cached data reads. This is distinct from the source date and retrieval time. The historical snapshot recorded no corrections to already stored prices; that observation does not remove the need to support corrections in subsequent operation.
+
+\section{Transaction boundaries and consistency}
+Within \texttt{Store.finish}, accepted observations, revision records, series revision counters, quarantine rows and batch totals are written in a database transaction. A database exception rolls the transaction back. Previously committed windows remain available if a later window fails.
+
+The \texttt{app\_windows} completion marker is committed separately after \texttt{finish}. Consequently, a crash can leave valid data stored while its application checkpoint is still pending. Recovery may download that window again, and the natural-key upsert makes this safe. A job can therefore have useful committed data even when its overall status is \texttt{retry\_wait} or \texttt{paused}; the acquisition checks described here account for the selected windows and their persisted outcomes.
+
+\section{Database responsibilities}
+The acquisition and operational tables share one SQLite database. Table~\ref{tab:tables} lists the tables relevant to the work documented here.
+
+\begin{table}[H]
+\centering
+\caption{Tables supporting ingestion and website operation}
+\label{tab:tables}
+\small
+\begin{tabular}{@{}p{0.28\textwidth}p{0.64\textwidth}@{}}
+\toprule
+Table & Responsibility \\
+\midrule
+\texttt{observations} & Canonical dated prices with six market/product dimensions and source payload. \\
+\texttt{series\_state} & Stable series identity, readable dimensions and data revision. \\
+\texttt{batches}, \texttt{pages} & Source-request scope, outcome, counts and archived-page metadata. \\
+\texttt{quarantine}, \texttt{revisions} & Rejected rows and previous values of corrected observations. \\
+\texttt{events} & Collector batch events. \\
+\texttt{app\_runs}, \texttt{app\_windows} & Persistent job queue, attempts, retry times and exact-window checkpoints. \\
+\texttt{app\_settings} & Pause flag, request pace and per-state update/history markers. \\
+\texttt{app\_diagnostics} & Request failures and diagnostic categories linked to jobs. \\
+\texttt{app\_arrivals} & Per-date observation counts after successful state updates. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Provenance, indexes and bounded archives}
+Each accepted payload retains the source URL, request batch, retrieval timestamp, original dimension text and original price unit alongside the normalised fields. Initial history windows archive redacted raw JSON pages on disk, with relative path, SHA-256 checksum and counts in \texttt{pages}. CAPTCHA answers, keys and report-access tickets are removed from archived bodies. Routine updates preserve validated row provenance but do not archive every raw response, limiting repeated raw-page growth. This does not place a strict upper bound on total database size; old jobs, diagnostics and revision history still need a retention policy.
+
+The composite observation index orders state, district, market, commodity, variety, grade and date, matching a history lookup for one series. The series primary key supports revision lookup, while job and window keys support recovery and deduplication. These structures support reads without re-parsing raw report files.
+
+\section{Algorithm for validation, upsert and revision tracking}
+\begin{lstlisting}[caption={Algorithm: ingest a complete downloaded window}]
+accepted = []; rejected = []; seen = set()
+for raw_row in downloaded_rows:
+    try:
+        record = normalise_date_text_prices_units_and_dimensions(raw_row)
+        verify record matches requested interval, state and commodity
+        key = JSON(casefold(date, state, district, market,
+                            commodity, variety, grade))
+        if key in seen: reject as duplicate within this report
+        seen.add(key); accepted.append((key, record))
+    except validation_error:
+        rejected.append((raw_row, reason))
+
+begin transaction:
+    remove superseded quarantine entries for this batch
+    changed_series = set()
+    for key, record in accepted:
+        previous = lookup observation by key
+        changed = absent(previous) or price_fields_or_unit_differ(previous, record)
+        if previous exists and changed:
+            append previous and new payloads to revisions
+        if changed and series(record) not in changed_series:
+            insert series revision 1 or increment existing revision
+            changed_series.add(series(record))
+        insert observation or update its price fields and payload
+    insert rejected rows with reasons into quarantine
+    set batch counts and complete / complete_with_quarantine / empty
+commit transaction
+\end{lstlisting}
+
+If a later duplicate within one report is rejected, the earlier accepted row remains in the candidate list; the code does not reconcile competing source quotations automatically. On a database error, the transaction rolls back its observations, revisions and counters together. Window completion is checkpointed subsequently as explained above.
+
+\section{Recursive redaction and archive integrity}
+Before a raw response is archived, a recursive tree walk removes dictionary keys named \texttt{report\_access}, \texttt{report\_ticket}, \texttt{captcha\_key}, \texttt{captcha} and \texttt{access\_token}. Lists are traversed element by element and scalar values pass through unchanged. Removing an entire access-metadata subtree avoids retaining its nested ticket values. The redacted JSON bytes are written to a page file and their SHA-256 checksum is stored with the relative path and page counts.
+
+\begin{lstlisting}[caption={Algorithm: redact access material before archiving}]
+redact(value):
+    if dictionary:
+        return {key: redact(child) for key, child in value.items()
+                if key not in sensitive_access_keys}
+    if list: return [redact(child) for child in value]
+    return value
+
+content = JSON_pretty(redact(response)).encode_UTF8()
+write content to batch/run/page JSON file
+save relative path, SHA256(content), page rows and reported total
+\end{lstlisting}
+
+The checksum records file identity; it is not a cryptographic signature proving the source's authorship. Report-page repetition uses a different hash over parsed page rows during download.
+
+\section{CSV export, missing-date accounting and quality flags}
+The exporter streams canonical payloads ordered by the six dimensions and date into \path{prices.csv}. Separate files contain quarantine rows, batch states, a JSON coverage summary, series coverage and large-change flags. It does not regenerate a dense calendar of artificial prices.
+
+For a series with $n$ stored dates between inclusive endpoints $a$ and $b$, missing dates within that span are counted as $(b-a)+1-n$. The result counts absence from the stored dataset; it does not infer market closures. A sequential scan of adjacent prices within the same series flags a change when the preceding value is positive and the new price is more than twice it or less than half of it. Such observations remain stored for review; a magnitude flag is not a validation failure.
+
+\begin{lstlisting}[caption={Algorithm: stream missing-date counts and review flags}]
+for each series grouped by its six dimensions:
+    first, last, n = minimum_date, maximum_date, row_count
+    missing = calendar_days(last - first) + 1 - n
+    export series identity, endpoints, n and missing
+
+previous = None
+for row in observations ordered by dimensions and date:
+    if same_series(previous, row) and previous.price > 0:
+        if row.price > 2 * previous.price or row.price < 0.5 * previous.price:
+            export a large-change review flag; retain the observation
+    previous = row
+\end{lstlisting}
+
+\section{Backup and restoration considerations}
+The database and any WAL contents form the live storage state. Copying only the main SQLite file while the service is writing can omit recent commits; a backup should use SQLite's backup API or be taken after a clean stop \cite{sqlitebackup}. Raw archives and the filter catalogue should be retained separately when reproducible source evidence is needed. The current application does not implement an automated backup schedule or a tested remote restore service; those are deployment tasks rather than completed features.
+
+\chapter{Scheduling, Job Selection and Recovery}
+
+\section{Scheduler and worker are separate}
+\label{sec:jobs}
+The runtime owns an APScheduler \texttt{BackgroundScheduler} and one collector-worker thread. A scheduled callback only inserts or reuses a job in SQLite; it does not download reports itself. The worker drains eligible jobs and, when none remain, waits up to 10 seconds before checking again. A queued trigger time is therefore not a promised completion time.
+
+The scheduler uses Indian Standard Time (UTC+05:30). Database timestamps are stored as UTC ISO strings; the administration interface displays them locally. Table~\ref{tab:jobs} lists the collection jobs within the scope of this report. Initial history is requested on startup when a state lacks a completed build, rather than by a periodic cron trigger.
+
+\begin{table}[H]
+\centering
+\caption{Collection jobs and their purpose (IST)}
+\label{tab:jobs}
+\small
+\begin{tabular}{@{}p{0.20\textwidth}p{0.22\textwidth}p{0.49\textwidth}@{}}
+\toprule
+Job & Trigger & Work queued \\
+\midrule
+Daily update & Every day 07:00 & One update per tracked state, re-fetching recent dates for active commodities. \\
+Weekly census & Sunday 03:00 & One wider update per state, including additional commodities. \\
+History build & Startup if needed; manual rebuild & Initial whole-period windows for one selected state. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Selecting the work inside a job}
+For a daily update, active commodities are those with an observation in that state within the last 60 days. The requested interval is \emph{today minus 14 days through today}; both endpoints are included, so it can cover 15 distinct calendar dates. This overlap is deliberate because reports for older dates can arrive after earlier collection attempts.
+
+The weekly census uses today minus 30 days through today and adds up to 40 commodities outside the active list. Extras are ordered by their last successful check, with never-checked commodities first and names breaking ties. This gradually discovers new or seasonal commodities without scanning the full catalogue every day. The filter catalogue is cached in \path{catalogue.json}; automatic detection of newly added catalogue entries is not implemented, so that catalogue needs explicit refresh when the source changes.
+
+The initial history build defaults to 365 inclusive calendar dates. For Uttar Pradesh, priority crops are fetched first and groups unlikely to report prices are left to census checks. Rajasthan starts from commodities observed in other states plus a list of local specialities. Initial seeding reduces empty requests; it is not proof that every possible commodity is already covered.
+
+\subsection{Algorithm for priority seeding and census selection}
+For the initial Uttar Pradesh history, known important crops such as wheat, potato, rice and tomato receive an explicit priority rank. Remaining crops are ordered by commodity-group preference and then name. Groups with little evidence of usable prices in the initial probes are deferred to discovery checks. For Rajasthan, the seed set is the union of commodity names seen in other states and configured local specialities. Names are compared without case differences.
+
+Routine daily active selection uses the existence of recent state observations; it does not apply the initial bootstrap priority sorting again. The weekly discovery order instead uses last-checked timestamps from completed, quarantined, empty or split batch records. A never-checked item has an empty timestamp and sorts ahead of dated checks.
+
+\begin{lstlisting}[caption={Algorithm: select daily and weekly commodity lists}]
+active_names = distinct commodities stored for this state
+               with date >= today - 60 days
+active = catalogue commodities whose casefolded names are active_names
+if daily_update: return active
+
+checked = latest successful batch timestamp for each state commodity
+others = catalogue commodities not in active
+sort others by (checked.get(id, ""), commodity_name)
+return active + first 40 others
+\end{lstlisting}
+
+\section{Queue deduplication and selection algorithm}
+Enqueueing uses a \texttt{BEGIN IMMEDIATE} database transaction. If the same kind and state already has a \texttt{queued}, \texttt{running} or \texttt{retry\_wait} job, its identifier is returned. Otherwise a new job is inserted. An update and weekly census are different job kinds and may both be queued.
+
+\begin{lstlisting}[caption={Algorithm: deduplicate a collection job atomically}]
+validate job kind and selected state
+if collection_paused:
+    if automatic request: return without adding a collection job
+    if manual collection request: clear collection_paused
+begin immediate transaction
+existing = oldest job with same kind and state
+           whose status is queued, running or retry_wait
+if existing exists:
+    commit; return existing.id
+id = new UUID
+insert queued job with id, kind, state and creation time
+commit; return id
+\end{lstlisting}
+
+For execution, the worker selects jobs with status \texttt{queued}, or \texttt{retry\_wait} whose \texttt{retry\_at} has arrived. It orders eligible non-bootstrap jobs before bootstrap jobs and then by creation time. This is a non-preemptive, oldest-first queue within those two groups, not a CPU time-slicing algorithm. A running history build or long census can delay later work. The priority policy does not guarantee a fixed start or completion time for a particular collection job.
+
+\begin{lstlisting}[caption={Selection of the next eligible backend job}]
+acquire in-process mutex without waiting; otherwise return
+acquire exclusive collector file lock; otherwise return
+
+# Collection-only view of the worker selection policy:
+if collection is paused: do not select a collection job
+
+choose a queued job or due retry-wait job
+order by (is_bootstrap, created_time)
+if none exists: release locks; return
+mark chosen job running
+execute it while holding the collector locks
+record success or the appropriate retry/pause transition
+release locks
+\end{lstlisting}
+
+The mutex prevents concurrent work within the process. The file lock on \path{output/.collector.lock} prevents another cooperating collector process from using the same output directory at the same time. This is appropriate for the local filesystem deployment; it is not a distributed locking service.
+
+\section{Job state transitions and checkpoints}
+New work enters \texttt{queued}, becomes \texttt{running}, and ends in \texttt{succeeded}, \texttt{retry\_wait} or \texttt{paused}. A retry time makes deferred work eligible again; it does not busy-wait inside the download loop. Failure details, attempt count, timestamps and progress remain queryable.
+
+Checkpoints are per exact commodity/date window, not per individual downloaded page. A retry skips an identical completed window, but restarts an incomplete one from its report pages. If a retry crosses midnight, the update recomputes its interval from the current date; changed interval keys can be fetched again. Natural-key upserts prevent duplicated observations in either case. This distinction explains what resumability guarantees and what it does not.
+
+\section{Failure classification and retry delays}
+The client performs bounded request-level retries for network failures and certain HTTP errors, normally up to five attempts with short exponential waits and consideration of \texttt{Retry-After}. Longer source cooldowns are handed back to the job service. There are therefore two layers: quick request recovery and persisted job deferral.
+
+\begin{table}[H]
+\centering
+\caption{Persisted job response after request-level handling}
+\label{tab:retry}
+\small
+\begin{tabular}{@{}p{0.23\textwidth}p{0.67\textwidth}@{}}
+\toprule
+Failure & Worker policy \\
+\midrule
+CAPTCHA exhaustion & Defer the commodity and continue the sweep. If it is the only deferral cause, retry after a base 10 minutes, then 20 minutes on subsequent failures. \\
+Throttling & Stop the sweep and defer the remainder. Usually retry after 15 minutes, then 30 minutes; a source-specified delay can be longer. \\
+Network/source outage & Stop and defer remaining work, usually 15 then 30 minutes, without changing the learned request pace. \\
+Access denied or response-format change & Pause collection immediately, retaining saved data and diagnostics. \\
+Other exception & Retry once after 30 minutes; pause if it fails again. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For a deferred or rate-limited job, the delay is its supplied base delay multiplied by $2^{\min(k,1)}$, where $k$ is the number of previously recorded failures. The configured deferral limit is 12 automatic retries after failures before collection pauses. A sweep with mixed failures uses the delay returned by the condition that stopped it, so not every CAPTCHA-containing run has the CAPTCHA-only delay.
+
+The collection pause is global: a fatal failure for one state prevents scheduled collection for both states. A manual collection action clears the pause and queues or reuses work, but does not change all historical paused job records back to queued.
+
+\section{Adaptive pacing}
+The persisted request interval starts at 7.5 seconds. After a throttled sweep it is multiplied by 1.5, capped at 30 seconds; after a sweep without throttling or outage it is multiplied by 0.9, floored at 4 seconds. The adjusted interval is used when constructing the next job attempt's client. An outage is excluded from pace adaptation because it is not evidence of the source's sustainable request rate.
+
+The new pace is not a replacement for cooldowns: multiplying the interval alone cannot recover an already exhausted request allowance. The policy combines conservative spacing with longer deferred waits, and never introduces concurrent report downloads.
+
+\begin{lstlisting}[caption={Algorithm: persist a learned request interval}]
+pace = saved_setting("pace_seconds", default=7.5)
+after a sweep:
+    if outage: leave pace unchanged
+    else if throttled: pace = min(30, 1.5 * pace)
+    else: pace = max(4, 0.9 * pace)
+    save round(pace, 2) in SQLite settings
+construct the next attempt's client using the saved pace
+\end{lstlisting}
+
+\section{Restart recovery and catch-up}
+At startup the application first attempts to acquire the collector file lock. If successful, jobs left \texttt{running} are returned to \texttt{queued}; their committed data and window checkpoints remain. The runtime registers its schedules again and starts the scheduler. For collection catch-up it considers each state:
+\begin{enumerate}
+  \item if history is incomplete, enqueue a bootstrap job;
+  \item otherwise, if there is no successful-update timestamp or it is older than 24 hours, enqueue one update;
+\end{enumerate}
+
+The work queue is persistent, but the cron trigger registration itself uses the scheduler's in-memory store. On restart, catch-up does not reconstruct every missed daily or weekly trigger. It queues one daily update when needed; a missed weekly census is not automatically replayed. This prevents a burst of redundant daily requests but leaves a wider discovery sweep to the next scheduled or manual census.
+
+\section{Late triggers and duplicate callbacks}
+The scheduler is configured with \texttt{coalesce=True}, \texttt{max\_instances=1} and \texttt{misfire\_grace\_time=3600} \cite{apscheduler}. Coalescing merges accumulated due executions of a scheduler callback; the grace period permits eligible late callback execution within one hour. The instance limit applies to that callback, which enqueues work, while the worker and locks enforce collection serialisation. These options do not wake a sleeping computer or keep a stopped process alive.
+
+\section{Why one scheduled collection a day}
+The initial design checked three times a day. In the historical probes a full recent-date Uttar Pradesh recheck changed 32 of 16,852 stored series (about 0.2\%), while a Rajasthan recheck two to three hours after its history build changed 264 of 4,554 (about 5.8\%). Those observations, together with reporting delays of days, motivated one daily trigger plus a wider weekly sweep. They do not establish that 07:00 is optimal for every state. The arrival log provides evidence for later timing changes.
+
+\chapter{Backend Integration and Daily Service Operation}
+
+\section{Serving saved observations}
+The running local application uses FastAPI and uvicorn for HTTP data access \cite{fastapi}. My backend work makes the validated observations queryable while collection proceeds independently. A stored-data read does not make a new Agmarknet report request.
+
+A history request resolves the series identifier to its saved six dimensions, selects matching observations in date order and optionally applies a recent-date cutoff. The CSV route exports the full saved history with its market/product dimensions and price unit. Status requests expose tracked states, last successful checks, the pause flag and running or waiting collection. State-selection requests obtain the saved series dimensions without re-parsing raw report files.
+
+The browser's periodic stored-data reads can observe committed updates without a manual source download. This is separate from acquisition scheduling: closing the browser does not stop the Python worker, and opening the browser does not start a scraping sweep.
+
+\section{Keeping reads responsive during collection}
+State selections and summary queries can scan many series. The service uses a short-lived in-memory cache with a 60-second lifetime, current-date check and generation counter. Saving a window invalidates the generation. In the live server, an expired entry can be returned while one background thread rebuilds it; repeated readers share that rebuild instead of each launching a new scan.
+
+This deliberately permits a slightly older list during refresh while preserving the committed database. Collection-dependent processing uses a fresh-read context so its database scans do not reuse a temporarily stale display list. Startup warms the farmer lists, and successful jobs warm them again. History reads use the database directly. The report's historical 10--30 millisecond response observation refers to warmed list/API reads on the local machine, not a guaranteed latency for every route or deployment.
+
+\subsection{Algorithm for stale-while-revalidate list caching}
+Each cached list stores a monotonic creation time, value, calendar date and generation number. An entry is fresh only if its age is below 60 seconds and both its date and generation match the current state. A saved source window increments the generation.
+
+In the live service, an expired entry can be returned while one rebuilding thread refreshes that key. A protected set records keys already rebuilding. A cache miss or a fresh-read context performs the build synchronously. The builder records the generation it started with, so a later invalidation makes its result recognisably old on the next read. If a background build fails, the old entry remains and a later request may retry; this policy favours availability but does not guarantee a fixed freshness deadline during repeated errors.
+
+\begin{lstlisting}[caption={Algorithm: serve and refresh a cached backend list}]
+under cache lock:
+    hit = cache.get(key); generation = current_generation
+    if hit and age < 60 and hit.date == today and hit.generation == generation:
+        return hit.value
+    if hit and live_background_refresh and not fresh_read_context:
+        if key not already rebuilding:
+            mark key rebuilding; start one rebuild thread
+        return hit.value
+value = build_from_database()
+under cache lock: save (monotonic_now, value, today, generation)
+return value
+
+background rebuild:
+    build using fresh-read context
+    publish value with captured generation
+    always remove key from rebuilding set
+\end{lstlisting}
+
+\section{Freshness is more than the last successful run}
+The backend distinguishes three times:
+\begin{enumerate}
+  \item \textbf{Observation date:} the market date to which a reported price belongs.
+  \item \textbf{Retrieval time:} when that source row was fetched and validated.
+  \item \textbf{Last successful update:} when a state's complete update workflow finished.
+\end{enumerate}
+A successful run today can retrieve a report whose newest usable observation is several days old. Conversely, a retrying run can already have committed useful new prices before it finishes. The public status reports overall completion, while provenance and job progress explain partial progress. The latest date alone also cannot establish that all commodities or markets have reported on that date.
+
+\section{Administration and monitoring support}
+The backend exposes job status, next scheduled checks, per-state coverage, quarantine counts, recent diagnostics and the arrival log to the administration interface. Backend collection actions request a state history rebuild, update or census. The job state, diagnostics and data-management actions provide the operational evidence needed to inspect those requests.
+
+Admin data and mutation routes require a local client address and reject non-local origins. This is a local-machine restriction, not a login or role system. The default service binds to \texttt{127.0.0.1}. A public reverse-proxy deployment requires deliberate authentication and proxy-aware access controls rather than assuming the current local address check remains sufficient.
+
+\section{The daily operating cycle}
+\begin{enumerate}
+  \item Start the Python service against the intended output directory. It opens storage, recovers interrupted work, registers triggers and performs catch-up checks.
+  \item Keep the process running with the computer awake and connected. The browser may be closed; it is not the scheduler.
+  \item At 07:00 IST, the scheduler queues one update per state. Duplicate pending work is reused, and the worker starts eligible jobs as earlier work permits.
+  \item The worker downloads recent windows, stores accepted rows, records failures and makes the committed observations available to backend reads. Throttling can extend completion well beyond the trigger time.
+  \item The backend exposes the committed observations and success markers; periodic website reads display the new state.
+  \item Inspect the admin status when a run is paused, unusually slow or missing. A persistent source failure needs investigation before manually resuming collection.
+\end{enumerate}
+
+\section{What maintains the service, and what remains manual}
+Automatic maintenance includes repeated collection, deduplication, retries, restart recovery, cache refresh and basic diagnostics. The process is not installed by this implementation as an operating-system service, and the database has no built-in scheduled off-machine backup. If the terminal session or computer stops the server, periodic callbacks stop too. Startup recovery only becomes active when the application is launched again.
+
+An always-on deployment should add process supervision, controlled restarts, persistent storage, backups and external checks for a stopped service. This report describes these as future operational improvements. It does not equate a locally working scheduled application with an unattended public deployment.
+
+\chapter{Data Coverage and Reporting Lag}
+
+\section{Historical collection coverage}
+The collection snapshot retained from 27 October 2026 contains approximately 685,000 validated observations across the two maintained states. Table~\ref{tab:data} records the original snapshot counts; it is not a live query of the continually updated database. The exact collected period varies with the state and build time, so the state-specific dates are retained.
+
+\begin{table}[H]
+\centering
+\caption{Data collected (as of 27 October 2026)}
+\label{tab:data}
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+& Uttar Pradesh & Rajasthan \\
+\midrule
+Validated price rows & about 488{,}000 & about 197{,}000 \\
+Period & 27 Oct 2025 -- 27 Oct 2026 & 28 Oct 2025 -- 27 Oct 2026 \\
+Commodities & 97 & 90 \\
+Markets / districts & 251 / 73 & 160 / 37 \\
+Series reported in the last 30 days & 4{,}912 & 1{,}732 \\
+\bottomrule
+\end{tabular}
+\end{table}
+A small Maharashtra pilot (about 8{,}700 rows) is kept in the database but is not shown.
+
+\section{Reporting lag}
+Table~\ref{tab:lag} and Figure~\ref{fig:lag} show the number of rows stored for each recent data date shortly after an update on 27 October 2026. Counts for Uttar Pradesh fall from about 1,300--1,600 per date up to 21 October to under 200 per date from 22 October, and keep shrinking towards the present: the newest days are not yet uploaded. Rajasthan's counts are much more complete for recent days. Sundays (18 and 25 October) have fewer rows in both states.
+
+\begin{table}[H]
+\centering
+\caption{Stored rows per data date, 27 October 2026 snapshot}
+\label{tab:lag}
+\small
+\begin{tabular}{@{}lrrlrr@{}}
+\toprule
+Date & UP & Rajasthan & Date & UP & Rajasthan \\
+\midrule
+13 Oct & 1{,}597 & 807 & 21 Oct & 1{,}442 & 879 \\
+14 Oct & 1{,}614 & 798 & 22 Oct & 199 & 840 \\
+15 Oct & 1{,}531 & 811 & 23 Oct & 198 & 723 \\
+16 Oct & 1{,}568 & 744 & 24 Oct & 173 & 456 \\
+17 Oct & 1{,}592 & 461 & 25 Oct (Sun) & 93 & 121 \\
+18 Oct (Sun) & 1{,}266 & 108 & 26 Oct & 95 & 580 \\
+19 Oct & 1{,}351 & 536 & 27 Oct & 30 & 64 \\
+20 Oct & 1{,}304 & 461 & & & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\safefig{04_arrival_lag.png}{0.92}
+\caption{Rows stored per data date for Uttar Pradesh and Rajasthan: recent dates in Uttar Pradesh are still largely missing.}
+\label{fig:lag}
+\end{figure}
+
+The backend implication is that repeated collection must revisit older dates, not merely request today. A source can publish new information for an earlier market date even when no correction to an already stored price occurs. The database therefore preserves gaps and records the retrieval time separately from the market date.
+
+\begin{figure}[H]
+\centering
+\safefig{05_example_series.png}{0.92}
+\caption{An example stored price series (fixed market, commodity, variety and grade) with unreported days left as gaps, not filled.}
+\label{fig:example}
+\end{figure}
+
+
+\section{The arrival log as operational evidence}
+After a successful daily or weekly update, \texttt{app\_arrivals} records the number of stored observations per recent market date for that state, the newest date and the number of changed series. Counts cover dates from today minus 21 days onward. The administration query compares each snapshot with the preceding snapshot for the same state and displays positive row-count increases.
+
+This distinguishes newly arriving reports for older dates from a simple advance in the latest date. It also makes timing decisions measurable: if a state's rows consistently arrive after the current check, a later check may be more useful. The count difference measures additional stored rows; it does not count every correction, because a changed value can leave the row count unchanged. The changed-series figure is therefore useful alongside it.
+
+\begin{lstlisting}[caption={Algorithm: compare per-state arrival snapshots}]
+after a successful update or census:
+    counts = rows per market date for this state since today - 21 days
+    save state, job kind, timestamp, changed_series, newest_date and counts
+
+for each recent saved snapshot:
+    previous = nearest earlier snapshot for the same state
+    if no previous: new_rows = unknown
+    else:
+        added[date] = counts[date] - previous.counts.get(date, 0)
+        keep only positive differences
+        new_rows = sum(added.values())
+    show most recent added dates and the total increase
+\end{lstlisting}
+
+\section{Missing data and limits of a successful scrape}
+Missing dates remain missing rather than being filled with zero, interpolation or a repeated price. The lack of a record does not identify whether the market was closed, did not trade that item or uploaded late. A complete download is complete relative to the requested source response, not a guarantee of exhaustive real-world market coverage.
+
+The application normally lists series that have reported within 30 days. Older observations remain in the database, and hiding a series from the current picker does not delete its history. The backend supplies the reporting history and freshness information while retaining older observations for inspection and export.
+
+\chapter{Collection Evidence and Backend Verification}
+
+\section{Historical request budget and collection effort}
+\label{sec:perf}
+Table~\ref{tab:effort} retains measurements from the original collection phase. These illustrate the effect of state-wide windows and the sensitivity to throttling. They should not be read as a fixed daily completion-time guarantee.
+
+\begin{table}[H]
+\centering
+\caption{Historical collection measurements (27 October 2026 evidence)}
+\label{tab:effort}
+\small
+\begin{tabular}{@{}p{0.48\textwidth}p{0.20\textwidth}p{0.20\textwidth}@{}}
+\toprule
+Measurement & Uttar Pradesh & Rajasthan \\
+\midrule
+History commodity windows requested & 408 & 150 \\
+History wall-clock time & About 12 hours & About 2.5 hours \\
+Recent-date update, observed example & About 8 minutes, not throttled & About 52 minutes, throttled \\
+Commodities in those update examples & 105 & 94 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Across the two states, the historical record described about 1,100 completed windows: 602 with data, 17 with quarantined rows and 478 empty. Empty windows are a substantial cost, supporting active-commodity updates and gradual discovery. The same evidence recorded nine throttling and three CAPTCHA diagnostic events. A diagnostic event count is not a calibrated failure probability, but it identifies throttling as a practical bottleneck in those runs.
+
+\section{Recorded daily operation on 6 November 2026}
+The local SQLite job records were inspected read-only on 6 November 2026. Both state updates were created at 01:30 UTC, corresponding to the configured 07:00 IST trigger, and both finished successfully (Table~\ref{tab:dailyactual}). The times are presented in IST and rounded to the nearest displayed second.
+
+\begin{table}[H]
+\centering
+\caption{Successful daily jobs recorded on 6 November 2026 (IST)}
+\label{tab:dailyactual}
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+State & Queued & Completed & Commodities & Recorded failures \\
+\midrule
+Uttar Pradesh & 07:00:00 & 08:25:54 & 105 & 0 \\
+Rajasthan & 07:00:00 & 09:45:10 & 94 & 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The corresponding arrival records reported 19 changed Uttar Pradesh series and two changed Rajasthan series, with the newest stored market date of 6 November for each state. These are changed-series counts, not counts of new rows. Rajasthan's job recorded one failed attempt before success; the successful job row alone does not identify the earlier failure's cause. Its final attempt began at approximately 09:21:32 IST, so the creation and completion times also include queueing and retry effects.
+
+These records establish that the backend completed the configured daily workflows on that date. They do not establish uninterrupted daily operation since installation: earlier records include a paused job and jobs that were executed well after creation. The report therefore distinguishes demonstrated runs from continuous-availability claims.
+
+\section{Failure modes encountered and resolved}
+\label{sec:failures}
+\begin{enumerate}
+  \item \textbf{Throttling mistaken for CAPTCHA rejection.} The source reused an error code, so the client had to classify on message content and stop the sweep instead of spending more challenge attempts.
+  \item \textbf{Network outage treated as a generic exception.} A generic one-retry policy paused collection too early. Explicit outage classification permits deferred retries without changing the request pace.
+  \item \textbf{Stale lists reused during processing.} A display-cache optimisation exposed an older list of series to backend processing. Fresh-read contexts now separate processing reads from temporarily stale display lists.
+  \item \textbf{Cache invalidation after updates.} Lists must be invalidated when source windows commit, and rebuilt after successful jobs; cache age alone does not immediately reflect newly stored series.
+  \item \textbf{Probes competing with routine collection.} Independent source investigation consumed the same request allowance as the running service. Investigative probes must be coordinated with scheduled collection.
+\end{enumerate}
+
+\section{Automated verification already present in the project}
+The source tree contains offline collector, storage, service and API tests. The collector module contains 33 test methods, including OCR, report access, parsing, validation, storage and queue planning. Relevant backend checks across the test modules include:
+\begin{itemize}
+  \item supported OCR glyphs, rejected malformed images, bounded challenges and ticket scope;
+  \item source parsing, explicit empty responses, units, invalid dates and request-dimension mismatches;
+  \item idempotent ingestion, correction history, quarantine and transaction rollback;
+  \item pagination integrity, deferred work, cooldowns, pace changes and interrupted-job recovery;
+  \item active and census commodity selection, independent state settings and job deduplication;
+  \item cache freshness, history export, local admin access and page reads that make no source requests.
+\end{itemize}
+
+The tests use fixtures, temporary databases and a fake source, allowing failures to be reproduced without consuming the portal's request allowance. They support behavioural verification but do not substitute for live throughput measurements or prove future source compatibility. Reproduction commands are given in Appendix~E; the existing suite is described here without claiming a fresh execution for this document revision.
+
+\chapter{Limitations and Future Work}
+
+\section{Current limitations}
+\begin{itemize}
+  \item \textbf{Single-machine availability.} The scheduler lives inside the running server; sleep, shutdown or process termination stops callbacks. There is no installed process supervisor or external uptime monitor.
+  \item \textbf{Source-controlled freshness.} Successful collection cannot retrieve observations that the market has not yet uploaded. A recent maximum date is not evidence that every series is current.
+  \item \textbf{Non-preemptive work.} A long running job can delay a daily update. The queue does not interrupt a report sweep or guarantee that a later collection job starts at its trigger time.
+  \item \textbf{Bounded recovery.} Persistent checkpoints survive restarts, but partial pages are re-downloaded. Retries crossing a date boundary can create new interval keys. Missed weekly triggers are not reconstructed automatically.
+  \item \textbf{Global pause.} A fatal state-specific error pauses scheduled collection for all tracked states. An isolated per-state pause would improve independence.
+  \item \textbf{Catalogue and format dependence.} Cached filters need explicit refresh, and changes to response fields, CAPTCHA rendering or limits may require code changes.
+  \item \textbf{Storage growth and backups.} Raw-update archiving is limited, but job history, diagnostics and correction records still accumulate. Automatic retention and backup/restore testing are not implemented.
+  \item \textbf{Deployment boundary.} Local client-address restrictions do not provide production user authentication. Public hosting needs a separate access and process-management setup.
+\end{itemize}
+
+\section{Backend improvements}
+\begin{enumerate}
+  \item \textbf{Always-on operation.} Deploy with persistent storage, process supervision, deliberate shutdown handling, HTTPS, authenticated administration and external freshness checks. Verify source access from the chosen host before relying on it.
+  \item \textbf{Backups and retention.} Add scheduled SQLite backups, archive retention and restoration exercises. Preserve enough provenance to reproduce reported collection evidence.
+  \item \textbf{Better freshness scheduling.} Use per-state arrival logs to choose check times. Consider a second check only where new observations justify the additional request cost.
+  \item \textbf{Stronger job isolation.} Reduce the time spent waiting behind long source jobs, introduce per-state pause control and persist last-completed weekly markers for deliberate catch-up.
+  \item \textbf{Catalogue maintenance.} Refresh and version the source filter catalogue, detect removals or renamed entries and review changes before collection continues.
+  \item \textbf{Broader coverage.} Test an all-states collection strategy. Historical probes showed an all-states filter; estimated history collection could fall from about 6,000 state-wise reports to 1,500--2,000 broader reports. These are planning estimates, not measured nationwide operation.
+  \item \textbf{Longer histories.} Earlier-year wheat probes demonstrated available rows and substantial market-name continuity. Collecting those years requires the same validation, provenance and reporting-lag controls, followed by separate checks of historical market identifiers and unit consistency.
+\end{enumerate}
+
+\chapter{Conclusion}
+The work I handled in the project assigned by my supervisor produced a backend that turns individually requested Agmarknet reports into a validated, queryable and repeatedly refreshed data service. Source investigation established that report count and throttling are the main collection constraints. State-wide commodity windows, controlled ticket reuse and pagination checks reduce unnecessary access while preserving the source's dimensions.
+
+The database supplies consistent observations, quarantine, correction history and provenance. Persistent jobs, exact-window checkpoints, adaptive pacing and retry classification make collection recoverable. Daily and weekly collection triggers feed a persistent queue, while the worker serialises execution and the data-serving layer keeps existing history available during updates. Recorded successful jobs on 6 November 2026 demonstrate this daily workflow without implying continuous operation or complete source reporting.
+
+The report has detailed the algorithms used for image recognition, report access, pagination, validation, identity, storage, scheduling and recovery. The next backend steps are supervised always-on deployment, tested backups, better per-state scheduling and controlled expansion of collection coverage.
+
+\appendix
+\chapter{Database Schema and Data Lifecycle}
+\begin{lstlisting}[caption={Simplified schema; fields omitted where not central}]
+observations(key PK, date, state, district, market, commodity,
+             variety, grade, min_price, max_price, modal_price,
+             unit, payload)
+series_state(id PK, dimensions, revision, updated)
+batches(id PK, state_id, commodity_id, start, end, market_id,
+        parent, status, attempts, rows, valid, rejected, error, updated)
+pages(batch_id, run_id, page, path, sha256, rows, total,
+      PK(batch_id, run_id, page))
+quarantine(id PK, batch_id, reason, raw, created)
+revisions(id PK, observation_key, previous_payload, new_payload, created)
+events(id PK, created, batch_id, event, detail)
+app_runs(id PK, kind, state, status, attempt, created, started,
+         finished, retry_at, detail, progress, total)
+app_windows(run_id, window_key, status, batch_id,
+            PK(run_id, window_key))
+app_settings(key PK, value)
+app_diagnostics(id PK, run_id, created, payload)
+app_arrivals(id PK, run_id, state, kind, at, changed_series,
+             newest, counts)
+\end{lstlisting}
+
+The schema lists the acquisition and operational tables relevant to this report. The payload of a canonical observation retains its source metadata. Durable database rows and disk archives survive process restarts; in-memory list caches and report tickets do not.
+
+\chapter{Backend Data and Collection API}
+\begin{longtable}{@{}p{0.44\textwidth}p{0.48\textwidth}@{}}
+\toprule
+Endpoint & Backend purpose \\
+\midrule
+\endfirsthead
+\toprule
+Endpoint & Backend purpose \\
+\midrule
+\endhead
+\texttt{GET /api/status} & Per-state completion markers, date, collection pause and current/waiting work. \\
+\texttt{GET /api/selections?state=} & Saved series dimensions for one state, together with collection status metadata. \\
+\texttt{GET /api/series/\{id\}/history?days=} & Date-ordered stored observations. \\
+\texttt{GET /api/series/\{id\}/history.csv} & Export of a series' complete saved history and dimensions. \\
+\texttt{GET /api/admin/status} & Local operational status, diagnostics, coverage, arrivals and scheduled next runs. \\
+\texttt{POST /api/admin/enqueue?kind=\&state=} & Local manual collection action. Bootstrap requires a chosen state. \\
+\bottomrule
+\end{longtable}
+
+This appendix lists data and collection operations within the report scope. Requests for stored observations do not initiate source scraping. Collection mutations are restricted to local administration.
+
+\chapter{Startup and Retry Algorithms}
+\begin{lstlisting}[caption={Startup recovery and registration, simplified}]
+if collector file lock is available:
+    change interrupted running jobs back to queued
+# Collection-specific scheduling steps:
+register daily_update at 07:00 IST
+register weekly_census at Sunday 03:00 IST
+warm saved-data lists in a background thread
+start scheduler
+for each tracked state:
+    if initial history incomplete: enqueue bootstrap
+    else if last success absent or older than 24 hours: enqueue update
+start single worker
+
+worker:
+    while service is running:
+        drain all eligible jobs using the selection policy
+        wait up to 10 seconds or until shutdown signal
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Failure transition after a running job, simplified}]
+if access denied or source format changed:
+    status = paused; collection_paused = true
+else if deferred / rate limited / outage:
+    if prior_failures < 12:
+        delay = exception_base_minutes * 2**min(prior_failures, 1)
+        status = retry_wait; retry_at = now + delay
+    else:
+        status = paused; collection_paused = true
+else:
+    retry once after 30 minutes; otherwise pause collection
+increment failure counter; save detail and timestamps
+keep committed observations and completed exact-window checkpoints
+\end{lstlisting}
+
+\chapter{Catalogue of Implemented Algorithms}
+The following index connects the algorithms explained in the report to the source functions. The standalone investigation tools are identified separately from the daily application workflow. Pseudocode is explanatory; the source remains the reference for exact exception and transaction boundaries.
+
+\small
+\begin{longtable}{@{}p{0.40\textwidth}p{0.51\textwidth}@{}}
+\toprule
+Algorithm or policy & Source implementation \\
+\midrule
+\endfirsthead
+\toprule
+Algorithm or policy & Source implementation \\
+\midrule
+\endhead
+Catalogue cache and refresh & \path{runner.catalogue}; \path{service.Service.filters} \\
+Report-filter construction & \path{client.parameters} \\
+Template-bank generation & \path{ocr.TemplateOCR.__init__} \\
+Percentile thresholding & \path{ocr.TemplateOCR.solve} \\
+Column-run glyph segmentation & \path{ocr.TemplateOCR.solve} \\
+Resized-template scoring and rejection & \path{ocr.TemplateOCR.solve} \\
+Scoped ticket fingerprint and reuse & \path{client.Client.scope}; \path{client.Client.report} \\
+Bounded challenge attempts & \path{client.Client.report} \\
+Monotonic request pacing and HTTP retries & \path{client.Client.request} \\
+Response/error classification & \path{client.Client.request}; \path{client.unpack} \\
+Page consistency and fingerprints & \path{service.Service.window} \\
+Recursive application date splitting & \path{service.Service.window} \\
+Sweep deferral and adaptive pace & \path{service.Service.sweep}; \path{service.Service.adjust_pace} \\
+Row normalisation and unit conversion & \path{storage.normalize}; \path{storage.number} \\
+Natural observation and series identity & \path{storage.Store.finish}; \path{storage.series_identity} \\
+Transactional upsert and revisions & \path{storage.Store.finish} \\
+Quarantine accounting & \path{storage.Store.finish} \\
+Recursive access-field redaction & \path{client.redact} \\
+Archive file hashing and page metadata & \path{storage.Store.raw} \\
+Missing-date and price-change flags & \path{storage.Store.export} \\
+Bootstrap priority and state seeding & \path{service.Service.by_priority}; \path{service.Service.bootstrap_items} \\
+Active and least-recently-checked selection & \path{service.Service.active_commodities}; \path{service.Service.census_items} \\
+Atomic job deduplication & \path{service.Service.enqueue} \\
+Non-preemptive queue and file locking & \path{service.Service.run_next} \\
+Persisted retry and pause transitions & \path{service.Service.run_next} \\
+Interrupted-job recovery & \path{service.Service.recover} \\
+Cron registration and startup catch-up & \path{app.Runtime.schedule}; \path{app.Runtime.catch_up} \\
+Stale-while-revalidate list caching & \path{service.Service.memo}; \path{service.Service.rebuild} \\
+Per-state arrival deltas & \path{service.Service.log_arrival}; \path{service.Service.arrivals} \\
+Standalone feasibility/version gate & \path{runner.feasibility}; \path{runner.require_gate} \\
+Standalone monthly plan & \path{storage.month_windows}; \path{runner.plan} \\
+Standalone date/market splitting & \path{runner.collect_batch} \\
+Standalone resume and export loop & \path{runner.run} \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+\chapter{Reproducibility and Evidence Dates}
+\section*{Starting the local backend}
+The application expects Python 3.11 or later on macOS or Linux. Dependencies for the integrated service are listed in \path{requirements-app.txt}. From the project directory:
+\begin{lstlisting}
+cd agmarknet_collector
+.venv/bin/python -m pip install -r requirements-app.txt
+.venv/bin/python -m agmarknet serve --output output
+# local service: http://127.0.0.1:8000
+# local admin:   http://127.0.0.1:8000/admin
+\end{lstlisting}
+The environment must already exist; if needed it can be created with \texttt{python3 -m venv .venv}. Starting the server can queue real collection through startup catch-up, so use the existing intended output directory and avoid running multiple unmanaged instances.
+
+\section*{Inspecting and testing}
+\begin{lstlisting}
+# Deterministic offline verification using temporary databases:
+.venv/bin/python -m unittest discover -s tests -v
+
+# Read-only inspection of recent persisted jobs, without starting the service:
+sqlite3 -readonly output/agmarknet.sqlite \
+  "SELECT kind,state,status,created,finished,attempt FROM app_runs ORDER BY created DESC LIMIT 10;"
+\end{lstlisting}
+UTC timestamps in SQLite require conversion by adding 05:30 for the IST examples in Chapter~7. The read-only inspection above does not enqueue jobs or refresh results.
+
+\section*{Source files for the documented behaviour}
+\begin{itemize}
+  \item \path{agmarknet/client.py} and \path{agmarknet/ocr.py}: source requests, ticket scope, challenge handling and request-level retries.
+  \item \path{agmarknet/storage.py}: normalisation, identity, transactions, quarantine, revisions and export.
+  \item \path{agmarknet/service.py}: application jobs, report windows, census selection, pace, persisted state and cache coordination.
+  \item \path{agmarknet/app.py}: runtime, scheduler registration, catch-up, data APIs and local administration boundary.
+  \item \path{agmarknet/runner.py}: standalone feasibility gate, calendar planning, splitting and collection loop.
+  \item \path{agmarknet/__main__.py}: command-line entry points and server startup.
+\end{itemize}
+
+Historical coverage, request-budget, collection-duration and reporting-lag tables are retained from the original 27 October 2026 evidence. The daily-run table was read from the local database on 6 November 2026. The implementation descriptions were checked against the source during this revision. Historical figures should be regenerated before replacing their underlying snapshot counts with current totals; they must not be relabelled as live measurements.
+
+\begin{thebibliography}{99}
+\addcontentsline{toc}{chapter}{Bibliography}
+
+\bibitem{agmarknet}
+Government of India, Ministry of Agriculture and Farmers Welfare,
+\emph{Agmarknet: Agricultural Marketing Information Network (Agmarknet 2.0)}.
+\url{https://agmarknet.gov.in/}.
+
+\bibitem{glez2014}
+D. Glez-Pe\~na, A. Louren\c{c}o, H. L\'opez-Fern\'andez, M. Reboiro-Jato and F. Fdez-Riverola,
+\emph{Web scraping technologies in an API world},
+Briefings in Bioinformatics, vol. 15, no. 5, pp. 788--797, 2014.
+
+\bibitem{sqlitewal}
+SQLite Documentation, \emph{Write-Ahead Logging}.
+\url{https://www.sqlite.org/wal.html}.
+
+\bibitem{sqlitebackup}
+SQLite Documentation, \emph{SQLite Backup API}.
+\url{https://www.sqlite.org/backup.html}.
+
+\bibitem{apscheduler}
+APScheduler 3.x Documentation, \emph{User guide: missed job executions, coalescing and concurrent instances}.
+\url{https://apscheduler.readthedocs.io/en/3.x/userguide.html}.
+
+\bibitem{fastapi}
+S. Ram\'irez, \emph{FastAPI documentation}.
+\url{https://fastapi.tiangolo.com/}.
+
+\end{thebibliography}
+\end{document}
