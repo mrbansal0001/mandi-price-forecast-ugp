@@ -31,7 +31,7 @@ The collected data is too large for git, so it is attached to the GitHub **Relea
 
 ```sh
 cd agmarknet_collector && mkdir -p output && cd output
-gh release download data-snapshot-2026-11-16 --repo OWNER/REPO
+gh release download data-snapshot-2026-11-16 --repo mrbansal0001/mandi-price-forecast-ugp
 gunzip agmarknet.sqlite.gz agmarknet.pre-app-backup.sqlite.gz
 tar -xzf output-raw.tar.gz && tar -xzf output-misc.tar.gz
 ```
